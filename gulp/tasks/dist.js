@@ -97,10 +97,10 @@ gulp.task('mermaid',function() {
             standalone: 'mermaid'
         }))
         .pipe(rename('mermaid.js'))
-        .pipe(gulp.dest('./dist/'))
-        .pipe(uglify())
-        .pipe(extReplace('.min.js'))
         .pipe(gulp.dest('./dist/'));
+        //.pipe(uglify())
+        //.pipe(extReplace('.min.js'))
+        //.pipe(gulp.dest('./dist/'));
 });
 
 // Basic usage

@@ -65,7 +65,9 @@ exports.LINETYPE = {
     ALT_ELSE     : 13 ,
     ALT_END      : 14 ,
     OPT_START    : 15 ,
-    OPT_END      : 16
+    OPT_END      : 16 ,
+    ACT_START    : 17 ,
+    ACT_END      : 18
 };
 
 exports.ARROWTYPE = {
@@ -126,6 +128,14 @@ exports.apply = function(param){
                 break;
             case 'optEnd':
                 exports.addSignal(undefined, undefined, undefined, param.signalType);
+                break;
+            case 'activateStart':
+                //log.debug('Loop text: ',param.loopText);
+                exports.addSignal(undefined, undefined, param.actor, param.signalType);
+                //yy.addSignal(undefined, undefined, $2, yy.LINETYPE.LOOP_START);
+                break;
+            case 'activateEnd':
+                exports.addSignal(undefined, undefined, param.actor, param.signalType);
                 break;
             case 'altStart':
                 //log.debug('Loop text: ',param.loopText);

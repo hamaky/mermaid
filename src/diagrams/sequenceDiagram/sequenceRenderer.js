@@ -104,6 +104,14 @@ exports.bounds = {
         //loop.stopy =  exports.bounds.getVerticalPos();
         return loop;
     },
+    newActivate:function(title){
+        this.list.push({startx:undefined,starty:this.verticalPos,stopx:undefined,stopy:undefined, title:title});
+    },
+    endActivate:function(){
+        var loop = this.list.pop();
+        //loop.stopy =  exports.bounds.getVerticalPos();
+        return loop;
+    },
     addElseToLoop:function(message){
         var loop = this.list.pop();
         loop.elsey =  exports.bounds.getVerticalPos();
@@ -334,6 +342,18 @@ module.exports.draw = function (text, id) {
                 exports.bounds.bumpVerticalPos(conf.boxMargin + conf.boxTextMargin);
                 break;
             case sq.yy.LINETYPE.LOOP_END:
+                loopData = exports.bounds.endLoop();
+
+                svgDraw.drawLoop(diagram, loopData,'loop', conf);
+                exports.bounds.bumpVerticalPos(conf.boxMargin);
+                break;
+
+            case sq.yy.LINETYPE.ACT_START:
+                exports.bounds.bumpVerticalPos(conf.boxMargin);
+                exports.bounds.newLoop(msg.message);
+                exports.bounds.bumpVerticalPos(conf.boxMargin + conf.boxTextMargin);
+                break;
+            case sq.yy.LINETYPE.ACT_END:
                 loopData = exports.bounds.endLoop();
 
                 svgDraw.drawLoop(diagram, loopData,'loop', conf);

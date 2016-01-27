@@ -1,322 +1,4 @@
-!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define([],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.mermaidAPI=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-
-},{}],2:[function(require,module,exports){
-(function (process){
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-// resolves . and .. elements in a path array with directory names there
-// must be no slashes, empty elements, or device names (c:\) in the array
-// (so also no leading and trailing slashes - it does not distinguish
-// relative and absolute paths)
-function normalizeArray(parts, allowAboveRoot) {
-  // if the path tries to go above the root, `up` ends up > 0
-  var up = 0;
-  for (var i = parts.length - 1; i >= 0; i--) {
-    var last = parts[i];
-    if (last === '.') {
-      parts.splice(i, 1);
-    } else if (last === '..') {
-      parts.splice(i, 1);
-      up++;
-    } else if (up) {
-      parts.splice(i, 1);
-      up--;
-    }
-  }
-
-  // if the path is allowed to go above the root, restore leading ..s
-  if (allowAboveRoot) {
-    for (; up--; up) {
-      parts.unshift('..');
-    }
-  }
-
-  return parts;
-}
-
-// Split a filename into [root, dir, basename, ext], unix version
-// 'root' is just a slash, or nothing.
-var splitPathRe =
-    /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
-var splitPath = function(filename) {
-  return splitPathRe.exec(filename).slice(1);
-};
-
-// path.resolve([from ...], to)
-// posix version
-exports.resolve = function() {
-  var resolvedPath = '',
-      resolvedAbsolute = false;
-
-  for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
-    var path = (i >= 0) ? arguments[i] : process.cwd();
-
-    // Skip empty and invalid entries
-    if (typeof path !== 'string') {
-      throw new TypeError('Arguments to path.resolve must be strings');
-    } else if (!path) {
-      continue;
-    }
-
-    resolvedPath = path + '/' + resolvedPath;
-    resolvedAbsolute = path.charAt(0) === '/';
-  }
-
-  // At this point the path should be resolved to a full absolute path, but
-  // handle relative paths to be safe (might happen when process.cwd() fails)
-
-  // Normalize the path
-  resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
-    return !!p;
-  }), !resolvedAbsolute).join('/');
-
-  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
-};
-
-// path.normalize(path)
-// posix version
-exports.normalize = function(path) {
-  var isAbsolute = exports.isAbsolute(path),
-      trailingSlash = substr(path, -1) === '/';
-
-  // Normalize the path
-  path = normalizeArray(filter(path.split('/'), function(p) {
-    return !!p;
-  }), !isAbsolute).join('/');
-
-  if (!path && !isAbsolute) {
-    path = '.';
-  }
-  if (path && trailingSlash) {
-    path += '/';
-  }
-
-  return (isAbsolute ? '/' : '') + path;
-};
-
-// posix version
-exports.isAbsolute = function(path) {
-  return path.charAt(0) === '/';
-};
-
-// posix version
-exports.join = function() {
-  var paths = Array.prototype.slice.call(arguments, 0);
-  return exports.normalize(filter(paths, function(p, index) {
-    if (typeof p !== 'string') {
-      throw new TypeError('Arguments to path.join must be strings');
-    }
-    return p;
-  }).join('/'));
-};
-
-
-// path.relative(from, to)
-// posix version
-exports.relative = function(from, to) {
-  from = exports.resolve(from).substr(1);
-  to = exports.resolve(to).substr(1);
-
-  function trim(arr) {
-    var start = 0;
-    for (; start < arr.length; start++) {
-      if (arr[start] !== '') break;
-    }
-
-    var end = arr.length - 1;
-    for (; end >= 0; end--) {
-      if (arr[end] !== '') break;
-    }
-
-    if (start > end) return [];
-    return arr.slice(start, end - start + 1);
-  }
-
-  var fromParts = trim(from.split('/'));
-  var toParts = trim(to.split('/'));
-
-  var length = Math.min(fromParts.length, toParts.length);
-  var samePartsLength = length;
-  for (var i = 0; i < length; i++) {
-    if (fromParts[i] !== toParts[i]) {
-      samePartsLength = i;
-      break;
-    }
-  }
-
-  var outputParts = [];
-  for (var i = samePartsLength; i < fromParts.length; i++) {
-    outputParts.push('..');
-  }
-
-  outputParts = outputParts.concat(toParts.slice(samePartsLength));
-
-  return outputParts.join('/');
-};
-
-exports.sep = '/';
-exports.delimiter = ':';
-
-exports.dirname = function(path) {
-  var result = splitPath(path),
-      root = result[0],
-      dir = result[1];
-
-  if (!root && !dir) {
-    // No dirname whatsoever
-    return '.';
-  }
-
-  if (dir) {
-    // It has a dirname, strip trailing slash
-    dir = dir.substr(0, dir.length - 1);
-  }
-
-  return root + dir;
-};
-
-
-exports.basename = function(path, ext) {
-  var f = splitPath(path)[2];
-  // TODO: make this comparison case-insensitive on windows?
-  if (ext && f.substr(-1 * ext.length) === ext) {
-    f = f.substr(0, f.length - ext.length);
-  }
-  return f;
-};
-
-
-exports.extname = function(path) {
-  return splitPath(path)[3];
-};
-
-function filter (xs, f) {
-    if (xs.filter) return xs.filter(f);
-    var res = [];
-    for (var i = 0; i < xs.length; i++) {
-        if (f(xs[i], i, xs)) res.push(xs[i]);
-    }
-    return res;
-}
-
-// String.prototype.substr - negative index don't work in IE8
-var substr = 'ab'.substr(-1) === 'b'
-    ? function (str, start, len) { return str.substr(start, len) }
-    : function (str, start, len) {
-        if (start < 0) start = str.length + start;
-        return str.substr(start, len);
-    }
-;
-
-}).call(this,require('_process'))
-},{"_process":3}],3:[function(require,module,exports){
-// shim for using process in browser
-
-var process = module.exports = {};
-
-process.nextTick = (function () {
-    var canSetImmediate = typeof window !== 'undefined'
-    && window.setImmediate;
-    var canMutationObserver = typeof window !== 'undefined'
-    && window.MutationObserver;
-    var canPost = typeof window !== 'undefined'
-    && window.postMessage && window.addEventListener
-    ;
-
-    if (canSetImmediate) {
-        return function (f) { return window.setImmediate(f) };
-    }
-
-    var queue = [];
-
-    if (canMutationObserver) {
-        var hiddenDiv = document.createElement("div");
-        var observer = new MutationObserver(function () {
-            var queueList = queue.slice();
-            queue.length = 0;
-            queueList.forEach(function (fn) {
-                fn();
-            });
-        });
-
-        observer.observe(hiddenDiv, { attributes: true });
-
-        return function nextTick(fn) {
-            if (!queue.length) {
-                hiddenDiv.setAttribute('yes', 'no');
-            }
-            queue.push(fn);
-        };
-    }
-
-    if (canPost) {
-        window.addEventListener('message', function (ev) {
-            var source = ev.source;
-            if ((source === window || source === null) && ev.data === 'process-tick') {
-                ev.stopPropagation();
-                if (queue.length > 0) {
-                    var fn = queue.shift();
-                    fn();
-                }
-            }
-        }, true);
-
-        return function nextTick(fn) {
-            queue.push(fn);
-            window.postMessage('process-tick', '*');
-        };
-    }
-
-    return function nextTick(fn) {
-        setTimeout(fn, 0);
-    };
-})();
-
-process.title = 'browser';
-process.browser = true;
-process.env = {};
-process.argv = [];
-
-function noop() {}
-
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-
-process.binding = function (name) {
-    throw new Error('process.binding is not supported');
-};
-
-// TODO(shtylman)
-process.cwd = function () { return '/' };
-process.chdir = function (dir) {
-    throw new Error('process.chdir is not supported');
-};
-
-},{}],4:[function(require,module,exports){
+(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 !function() {
   var d3 = {
     version: "3.5.6"
@@ -9821,7 +9503,7 @@ process.chdir = function (dir) {
   if (typeof define === "function" && define.amd) define(d3); else if (typeof module === "object" && module.exports) module.exports = d3;
   this.d3 = d3;
 }();
-},{}],5:[function(require,module,exports){
+},{}],2:[function(require,module,exports){
 /**
  * @license
  * Copyright (c) 2012-2013 Chris Pettitt
@@ -9853,7 +9535,7 @@ module.exports =  {
   version: require("./lib/version")
 };
 
-},{"./lib/dagre":12,"./lib/graphlib":13,"./lib/intersect":14,"./lib/render":29,"./lib/util":31,"./lib/version":32}],6:[function(require,module,exports){
+},{"./lib/dagre":9,"./lib/graphlib":10,"./lib/intersect":11,"./lib/render":26,"./lib/util":28,"./lib/version":29}],3:[function(require,module,exports){
 var util = require("./util");
 
 module.exports = {
@@ -9917,7 +9599,7 @@ function undirected(parent, id, edge, type) {
   util.applyStyle(path, edge[type + "Style"]);
 }
 
-},{"./util":31}],7:[function(require,module,exports){
+},{"./util":28}],4:[function(require,module,exports){
 var util = require("./util"),
     addLabel = require("./label/add-label");
 
@@ -9962,7 +9644,7 @@ function createClusters(selection, g) {
   return svgClusters;
 }
 
-},{"./label/add-label":22,"./util":31}],8:[function(require,module,exports){
+},{"./label/add-label":19,"./util":28}],5:[function(require,module,exports){
 "use strict";
 
 var _ = require("./lodash"),
@@ -9999,7 +9681,7 @@ function createEdgeLabels(selection, g) {
   return svgEdgeLabels;
 }
 
-},{"./d3":11,"./label/add-label":22,"./lodash":25,"./util":31}],9:[function(require,module,exports){
+},{"./d3":8,"./label/add-label":19,"./lodash":22,"./util":28}],6:[function(require,module,exports){
 "use strict";
 
 var _ = require("./lodash"),
@@ -10131,7 +9813,7 @@ function exit(svgPaths, g) {
     });
 }
 
-},{"./d3":11,"./intersect/intersect-node":18,"./lodash":25,"./util":31}],10:[function(require,module,exports){
+},{"./d3":8,"./intersect/intersect-node":15,"./lodash":22,"./util":28}],7:[function(require,module,exports){
 "use strict";
 
 var _ = require("./lodash"),
@@ -10191,11 +9873,11 @@ function createNodes(selection, g, shapes) {
   return svgNodes;
 }
 
-},{"./d3":11,"./label/add-label":22,"./lodash":25,"./util":31}],11:[function(require,module,exports){
+},{"./d3":8,"./label/add-label":19,"./lodash":22,"./util":28}],8:[function(require,module,exports){
 // Stub to get D3 either via NPM or from the global object
 module.exports = window.d3;
 
-},{}],12:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 /* global window */
 
 var dagre;
@@ -10212,7 +9894,7 @@ if (!dagre) {
 
 module.exports = dagre;
 
-},{"dagre":54}],13:[function(require,module,exports){
+},{"dagre":51}],10:[function(require,module,exports){
 /* global window */
 
 var graphlib;
@@ -10229,7 +9911,7 @@ if (!graphlib) {
 
 module.exports = graphlib;
 
-},{"graphlib":33}],14:[function(require,module,exports){
+},{"graphlib":30}],11:[function(require,module,exports){
 module.exports = {
   node: require("./intersect-node"),
   circle: require("./intersect-circle"),
@@ -10238,7 +9920,7 @@ module.exports = {
   rect: require("./intersect-rect")
 };
 
-},{"./intersect-circle":15,"./intersect-ellipse":16,"./intersect-node":18,"./intersect-polygon":19,"./intersect-rect":20}],15:[function(require,module,exports){
+},{"./intersect-circle":12,"./intersect-ellipse":13,"./intersect-node":15,"./intersect-polygon":16,"./intersect-rect":17}],12:[function(require,module,exports){
 var intersectEllipse = require("./intersect-ellipse");
 
 module.exports = intersectCircle;
@@ -10247,7 +9929,7 @@ function intersectCircle(node, rx, point) {
   return intersectEllipse(node, rx, rx, point);
 }
 
-},{"./intersect-ellipse":16}],16:[function(require,module,exports){
+},{"./intersect-ellipse":13}],13:[function(require,module,exports){
 module.exports = intersectEllipse;
 
 function intersectEllipse(node, rx, ry, point) {
@@ -10274,7 +9956,7 @@ function intersectEllipse(node, rx, ry, point) {
 }
 
 
-},{}],17:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 module.exports = intersectLine;
 
 /*
@@ -10346,14 +10028,14 @@ function sameSign(r1, r2) {
   return r1 * r2 > 0;
 }
 
-},{}],18:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 module.exports = intersectNode;
 
 function intersectNode(node, point) {
   return node.intersect(point);
 }
 
-},{}],19:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 var intersectLine = require("./intersect-line");
 
 module.exports = intersectPolygon;
@@ -10410,7 +10092,7 @@ function intersectPolygon(node, polyPoints, point) {
   return intersections[0];
 }
 
-},{"./intersect-line":17}],20:[function(require,module,exports){
+},{"./intersect-line":14}],17:[function(require,module,exports){
 module.exports = intersectRect;
 
 function intersectRect(node, point) {
@@ -10444,7 +10126,7 @@ function intersectRect(node, point) {
   return {x: x + sx, y: y + sy};
 }
 
-},{}],21:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 var util = require("../util");
 
 module.exports = addHtmlLabel;
@@ -10489,7 +10171,7 @@ function addHtmlLabel(root, node) {
   return fo;
 }
 
-},{"../util":31}],22:[function(require,module,exports){
+},{"../util":28}],19:[function(require,module,exports){
 var addTextLabel = require("./add-text-label"),
     addHtmlLabel = require("./add-html-label"),
     addSVGLabel  = require("./add-svg-label");
@@ -10528,7 +10210,7 @@ function addLabel(root, node, location) {
   return labelSvg;
 }
 
-},{"./add-html-label":21,"./add-svg-label":23,"./add-text-label":24}],23:[function(require,module,exports){
+},{"./add-html-label":18,"./add-svg-label":20,"./add-text-label":21}],20:[function(require,module,exports){
 var util = require("../util");
 
 module.exports = addSVGLabel;
@@ -10543,7 +10225,7 @@ function addSVGLabel(root, node) {
   return domNode;
 }
 
-},{"../util":31}],24:[function(require,module,exports){
+},{"../util":28}],21:[function(require,module,exports){
 var util = require("../util");
 
 module.exports = addTextLabel;
@@ -10590,7 +10272,7 @@ function processEscapeSequences(text) {
   return newText;
 }
 
-},{"../util":31}],25:[function(require,module,exports){
+},{"../util":28}],22:[function(require,module,exports){
 /* global window */
 
 var lodash;
@@ -10607,7 +10289,7 @@ if (!lodash) {
 
 module.exports = lodash;
 
-},{"lodash":53}],26:[function(require,module,exports){
+},{"lodash":50}],23:[function(require,module,exports){
 "use strict";
 
 var util = require("./util"),
@@ -10643,7 +10325,7 @@ function positionClusters(selection, g) {
 
 }
 
-},{"./d3":11,"./util":31}],27:[function(require,module,exports){
+},{"./d3":8,"./util":28}],24:[function(require,module,exports){
 "use strict";
 
 var util = require("./util"),
@@ -10667,7 +10349,7 @@ function positionEdgeLabels(selection, g) {
     .attr("transform", translate);
 }
 
-},{"./d3":11,"./lodash":25,"./util":31}],28:[function(require,module,exports){
+},{"./d3":8,"./lodash":22,"./util":28}],25:[function(require,module,exports){
 "use strict";
 
 var util = require("./util"),
@@ -10690,7 +10372,7 @@ function positionNodes(selection, g) {
     .attr("transform", translate);
 }
 
-},{"./d3":11,"./util":31}],29:[function(require,module,exports){
+},{"./d3":8,"./util":28}],26:[function(require,module,exports){
 var _ = require("./lodash"),
     layout = require("./dagre").layout;
 
@@ -10859,7 +10541,7 @@ function createOrSelectGroup(root, name) {
   return selection;
 }
 
-},{"./arrows":6,"./create-clusters":7,"./create-edge-labels":8,"./create-edge-paths":9,"./create-nodes":10,"./dagre":12,"./lodash":25,"./position-clusters":26,"./position-edge-labels":27,"./position-nodes":28,"./shapes":30}],30:[function(require,module,exports){
+},{"./arrows":3,"./create-clusters":4,"./create-edge-labels":5,"./create-edge-paths":6,"./create-nodes":7,"./dagre":9,"./lodash":22,"./position-clusters":23,"./position-edge-labels":24,"./position-nodes":25,"./shapes":27}],27:[function(require,module,exports){
 "use strict";
 
 var intersectRect = require("./intersect/intersect-rect"),
@@ -10942,7 +10624,7 @@ function diamond(parent, bbox, node) {
   return shapeSvg;
 }
 
-},{"./intersect/intersect-circle":15,"./intersect/intersect-ellipse":16,"./intersect/intersect-polygon":19,"./intersect/intersect-rect":20}],31:[function(require,module,exports){
+},{"./intersect/intersect-circle":12,"./intersect/intersect-ellipse":13,"./intersect/intersect-polygon":16,"./intersect/intersect-rect":17}],28:[function(require,module,exports){
 var _ = require("./lodash");
 
 // Public utility functions
@@ -10998,10 +10680,10 @@ function applyTransition(selection, g) {
   return selection;
 }
 
-},{"./lodash":25}],32:[function(require,module,exports){
+},{"./lodash":22}],29:[function(require,module,exports){
 module.exports = "0.4.10";
 
-},{}],33:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 /**
  * Copyright (c) 2014, Chris Pettitt
  * All rights reserved.
@@ -11041,7 +10723,7 @@ module.exports = {
   version: lib.version
 };
 
-},{"./lib":49,"./lib/alg":40,"./lib/json":50}],34:[function(require,module,exports){
+},{"./lib":46,"./lib/alg":37,"./lib/json":47}],31:[function(require,module,exports){
 var _ = require("../lodash");
 
 module.exports = components;
@@ -11070,7 +10752,7 @@ function components(g) {
   return cmpts;
 }
 
-},{"../lodash":51}],35:[function(require,module,exports){
+},{"../lodash":48}],32:[function(require,module,exports){
 var _ = require("../lodash");
 
 module.exports = dfs;
@@ -11111,7 +10793,7 @@ function doDfs(g, v, postorder, visited, acc) {
   }
 }
 
-},{"../lodash":51}],36:[function(require,module,exports){
+},{"../lodash":48}],33:[function(require,module,exports){
 var dijkstra = require("./dijkstra"),
     _ = require("../lodash");
 
@@ -11123,7 +10805,7 @@ function dijkstraAll(g, weightFunc, edgeFunc) {
   }, {});
 }
 
-},{"../lodash":51,"./dijkstra":37}],37:[function(require,module,exports){
+},{"../lodash":48,"./dijkstra":34}],34:[function(require,module,exports){
 var _ = require("../lodash"),
     PriorityQueue = require("../data/priority-queue");
 
@@ -11179,7 +10861,7 @@ function runDijkstra(g, source, weightFn, edgeFn) {
   return results;
 }
 
-},{"../data/priority-queue":47,"../lodash":51}],38:[function(require,module,exports){
+},{"../data/priority-queue":44,"../lodash":48}],35:[function(require,module,exports){
 var _ = require("../lodash"),
     tarjan = require("./tarjan");
 
@@ -11191,7 +10873,7 @@ function findCycles(g) {
   });
 }
 
-},{"../lodash":51,"./tarjan":45}],39:[function(require,module,exports){
+},{"../lodash":48,"./tarjan":42}],36:[function(require,module,exports){
 var _ = require("../lodash");
 
 module.exports = floydWarshall;
@@ -11243,7 +10925,7 @@ function runFloydWarshall(g, weightFn, edgeFn) {
   return results;
 }
 
-},{"../lodash":51}],40:[function(require,module,exports){
+},{"../lodash":48}],37:[function(require,module,exports){
 module.exports = {
   components: require("./components"),
   dijkstra: require("./dijkstra"),
@@ -11258,7 +10940,7 @@ module.exports = {
   topsort: require("./topsort")
 };
 
-},{"./components":34,"./dijkstra":37,"./dijkstra-all":36,"./find-cycles":38,"./floyd-warshall":39,"./is-acyclic":41,"./postorder":42,"./preorder":43,"./prim":44,"./tarjan":45,"./topsort":46}],41:[function(require,module,exports){
+},{"./components":31,"./dijkstra":34,"./dijkstra-all":33,"./find-cycles":35,"./floyd-warshall":36,"./is-acyclic":38,"./postorder":39,"./preorder":40,"./prim":41,"./tarjan":42,"./topsort":43}],38:[function(require,module,exports){
 var topsort = require("./topsort");
 
 module.exports = isAcyclic;
@@ -11275,7 +10957,7 @@ function isAcyclic(g) {
   return true;
 }
 
-},{"./topsort":46}],42:[function(require,module,exports){
+},{"./topsort":43}],39:[function(require,module,exports){
 var dfs = require("./dfs");
 
 module.exports = postorder;
@@ -11284,7 +10966,7 @@ function postorder(g, vs) {
   return dfs(g, vs, "post");
 }
 
-},{"./dfs":35}],43:[function(require,module,exports){
+},{"./dfs":32}],40:[function(require,module,exports){
 var dfs = require("./dfs");
 
 module.exports = preorder;
@@ -11293,7 +10975,7 @@ function preorder(g, vs) {
   return dfs(g, vs, "pre");
 }
 
-},{"./dfs":35}],44:[function(require,module,exports){
+},{"./dfs":32}],41:[function(require,module,exports){
 var _ = require("../lodash"),
     Graph = require("../graph"),
     PriorityQueue = require("../data/priority-queue");
@@ -11347,7 +11029,7 @@ function prim(g, weightFunc) {
   return result;
 }
 
-},{"../data/priority-queue":47,"../graph":48,"../lodash":51}],45:[function(require,module,exports){
+},{"../data/priority-queue":44,"../graph":45,"../lodash":48}],42:[function(require,module,exports){
 var _ = require("../lodash");
 
 module.exports = tarjan;
@@ -11396,7 +11078,7 @@ function tarjan(g) {
   return results;
 }
 
-},{"../lodash":51}],46:[function(require,module,exports){
+},{"../lodash":48}],43:[function(require,module,exports){
 var _ = require("../lodash");
 
 module.exports = topsort;
@@ -11432,7 +11114,7 @@ function topsort(g) {
 
 function CycleException() {}
 
-},{"../lodash":51}],47:[function(require,module,exports){
+},{"../lodash":48}],44:[function(require,module,exports){
 var _ = require("../lodash");
 
 module.exports = PriorityQueue;
@@ -11586,7 +11268,7 @@ PriorityQueue.prototype._swap = function(i, j) {
   keyIndices[origArrI.key] = j;
 };
 
-},{"../lodash":51}],48:[function(require,module,exports){
+},{"../lodash":48}],45:[function(require,module,exports){
 "use strict";
 
 var _ = require("./lodash");
@@ -12107,14 +11789,14 @@ function edgeObjToId(isDirected, edgeObj) {
   return edgeArgsToId(isDirected, edgeObj.v, edgeObj.w, edgeObj.name);
 }
 
-},{"./lodash":51}],49:[function(require,module,exports){
+},{"./lodash":48}],46:[function(require,module,exports){
 // Includes only the "core" of graphlib
 module.exports = {
   Graph: require("./graph"),
   version: require("./version")
 };
 
-},{"./graph":48,"./version":52}],50:[function(require,module,exports){
+},{"./graph":45,"./version":49}],47:[function(require,module,exports){
 var _ = require("./lodash"),
     Graph = require("./graph");
 
@@ -12182,7 +11864,7 @@ function read(json) {
   return g;
 }
 
-},{"./graph":48,"./lodash":51}],51:[function(require,module,exports){
+},{"./graph":45,"./lodash":48}],48:[function(require,module,exports){
 /* global window */
 
 var lodash;
@@ -12199,10 +11881,10 @@ if (!lodash) {
 
 module.exports = lodash;
 
-},{"lodash":53}],52:[function(require,module,exports){
+},{"lodash":50}],49:[function(require,module,exports){
 module.exports = '1.0.7';
 
-},{}],53:[function(require,module,exports){
+},{}],50:[function(require,module,exports){
 (function (global){
 /**
  * @license
@@ -24556,8 +24238,8 @@ module.exports = '1.0.7';
   }
 }.call(this));
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],54:[function(require,module,exports){
+}).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{}],51:[function(require,module,exports){
 /*
 Copyright (c) 2012-2014 Chris Pettitt
 
@@ -24592,7 +24274,7 @@ module.exports = {
   version: require("./lib/version")
 };
 
-},{"./lib/debug":59,"./lib/graphlib":60,"./lib/layout":62,"./lib/util":82,"./lib/version":83}],55:[function(require,module,exports){
+},{"./lib/debug":56,"./lib/graphlib":57,"./lib/layout":59,"./lib/util":79,"./lib/version":80}],52:[function(require,module,exports){
 "use strict";
 
 var _ = require("./lodash"),
@@ -24661,7 +24343,7 @@ function undo(g) {
   });
 }
 
-},{"./greedy-fas":61,"./lodash":63}],56:[function(require,module,exports){
+},{"./greedy-fas":58,"./lodash":60}],53:[function(require,module,exports){
 var _ = require("./lodash"),
     util = require("./util");
 
@@ -24701,7 +24383,7 @@ function addBorderNode(g, prop, prefix, sg, sgNode, rank) {
   }
 }
 
-},{"./lodash":63,"./util":82}],57:[function(require,module,exports){
+},{"./lodash":60,"./util":79}],54:[function(require,module,exports){
 "use strict";
 
 var _ = require("./lodash");
@@ -24775,7 +24457,7 @@ function swapXYOne(attrs) {
   attrs.y = x;
 }
 
-},{"./lodash":63}],58:[function(require,module,exports){
+},{"./lodash":60}],55:[function(require,module,exports){
 /*
  * Simple doubly linked list implementation derived from Cormen, et al.,
  * "Introduction to Algorithms".
@@ -24833,7 +24515,7 @@ function filterOutLinks(k, v) {
   }
 }
 
-},{}],59:[function(require,module,exports){
+},{}],56:[function(require,module,exports){
 var _ = require("./lodash"),
     util = require("./util"),
     Graph = require("./graphlib").Graph;
@@ -24869,7 +24551,7 @@ function debugOrdering(g) {
   return h;
 }
 
-},{"./graphlib":60,"./lodash":63,"./util":82}],60:[function(require,module,exports){
+},{"./graphlib":57,"./lodash":60,"./util":79}],57:[function(require,module,exports){
 /* global window */
 
 var graphlib;
@@ -24886,7 +24568,7 @@ if (!graphlib) {
 
 module.exports = graphlib;
 
-},{"graphlib":84}],61:[function(require,module,exports){
+},{"graphlib":81}],58:[function(require,module,exports){
 var _ = require("./lodash"),
     Graph = require("./graphlib").Graph,
     List = require("./data/list");
@@ -25006,7 +24688,7 @@ function assignBucket(buckets, zeroIdx, entry) {
   }
 }
 
-},{"./data/list":58,"./graphlib":60,"./lodash":63}],62:[function(require,module,exports){
+},{"./data/list":55,"./graphlib":57,"./lodash":60}],59:[function(require,module,exports){
 "use strict";
 
 var _ = require("./lodash"),
@@ -25400,9 +25082,9 @@ function canonicalize(attrs) {
   return newAttrs;
 }
 
-},{"./acyclic":55,"./add-border-segments":56,"./coordinate-system":57,"./graphlib":60,"./lodash":63,"./nesting-graph":64,"./normalize":65,"./order":70,"./parent-dummy-chains":75,"./position":77,"./rank":79,"./util":82}],63:[function(require,module,exports){
-module.exports=require(51)
-},{"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\lodash.js":51,"lodash":104}],64:[function(require,module,exports){
+},{"./acyclic":52,"./add-border-segments":53,"./coordinate-system":54,"./graphlib":57,"./lodash":60,"./nesting-graph":61,"./normalize":62,"./order":67,"./parent-dummy-chains":72,"./position":74,"./rank":76,"./util":79}],60:[function(require,module,exports){
+module.exports=require(48)
+},{"lodash":101}],61:[function(require,module,exports){
 var _ = require("./lodash"),
     util = require("./util");
 
@@ -25536,7 +25218,7 @@ function cleanup(g) {
   });
 }
 
-},{"./lodash":63,"./util":82}],65:[function(require,module,exports){
+},{"./lodash":60,"./util":79}],62:[function(require,module,exports){
 "use strict";
 
 var _ = require("./lodash"),
@@ -25628,7 +25310,7 @@ function undo(g) {
   });
 }
 
-},{"./lodash":63,"./util":82}],66:[function(require,module,exports){
+},{"./lodash":60,"./util":79}],63:[function(require,module,exports){
 var _ = require("../lodash");
 
 module.exports = addSubgraphConstraints;
@@ -25683,7 +25365,7 @@ function addSubgraphConstraints(g, cg, vs) {
   */
 }
 
-},{"../lodash":63}],67:[function(require,module,exports){
+},{"../lodash":60}],64:[function(require,module,exports){
 var _ = require("../lodash");
 
 module.exports = barycenter;
@@ -25713,7 +25395,7 @@ function barycenter(g, movable) {
 }
 
 
-},{"../lodash":63}],68:[function(require,module,exports){
+},{"../lodash":60}],65:[function(require,module,exports){
 var _ = require("../lodash"),
     Graph = require("../graphlib").Graph;
 
@@ -25788,7 +25470,7 @@ function createRootNode(g) {
   return v;
 }
 
-},{"../graphlib":60,"../lodash":63}],69:[function(require,module,exports){
+},{"../graphlib":57,"../lodash":60}],66:[function(require,module,exports){
 "use strict";
 
 var _ = require("../lodash");
@@ -25860,7 +25542,7 @@ function twoLayerCrossCount(g, northLayer, southLayer) {
   return cc;
 }
 
-},{"../lodash":63}],70:[function(require,module,exports){
+},{"../lodash":60}],67:[function(require,module,exports){
 "use strict";
 
 var _ = require("../lodash"),
@@ -25941,7 +25623,7 @@ function assignOrder(g, layering) {
   });
 }
 
-},{"../graphlib":60,"../lodash":63,"../util":82,"./add-subgraph-constraints":66,"./build-layer-graph":68,"./cross-count":69,"./init-order":71,"./sort-subgraph":73}],71:[function(require,module,exports){
+},{"../graphlib":57,"../lodash":60,"../util":79,"./add-subgraph-constraints":63,"./build-layer-graph":65,"./cross-count":66,"./init-order":68,"./sort-subgraph":70}],68:[function(require,module,exports){
 "use strict";
 
 var _ = require("../lodash");
@@ -25981,7 +25663,7 @@ function initOrder(g) {
   return layers;
 }
 
-},{"../lodash":63}],72:[function(require,module,exports){
+},{"../lodash":60}],69:[function(require,module,exports){
 "use strict";
 
 var _ = require("../lodash");
@@ -26106,7 +25788,7 @@ function mergeEntries(target, source) {
   source.merged = true;
 }
 
-},{"../lodash":63}],73:[function(require,module,exports){
+},{"../lodash":60}],70:[function(require,module,exports){
 var _ = require("../lodash"),
     barycenter = require("./barycenter"),
     resolveConflicts = require("./resolve-conflicts"),
@@ -26184,7 +25866,7 @@ function mergeBarycenters(target, other) {
   }
 }
 
-},{"../lodash":63,"./barycenter":67,"./resolve-conflicts":72,"./sort":74}],74:[function(require,module,exports){
+},{"../lodash":60,"./barycenter":64,"./resolve-conflicts":69,"./sort":71}],71:[function(require,module,exports){
 var _ = require("../lodash"),
     util = require("../util");
 
@@ -26243,7 +25925,7 @@ function compareWithBias(bias) {
   };
 }
 
-},{"../lodash":63,"../util":82}],75:[function(require,module,exports){
+},{"../lodash":60,"../util":79}],72:[function(require,module,exports){
 var _ = require("./lodash");
 
 module.exports = parentDummyChains;
@@ -26331,7 +26013,7 @@ function postorder(g) {
   return result;
 }
 
-},{"./lodash":63}],76:[function(require,module,exports){
+},{"./lodash":60}],73:[function(require,module,exports){
 "use strict";
 
 var _ = require("../lodash"),
@@ -26731,7 +26413,7 @@ function width(g, v) {
   return g.node(v).width;
 }
 
-},{"../graphlib":60,"../lodash":63,"../util":82}],77:[function(require,module,exports){
+},{"../graphlib":57,"../lodash":60,"../util":79}],74:[function(require,module,exports){
 "use strict";
 
 var _ = require("../lodash"),
@@ -26763,7 +26445,7 @@ function positionY(g) {
 }
 
 
-},{"../lodash":63,"../util":82,"./bk":76}],78:[function(require,module,exports){
+},{"../lodash":60,"../util":79,"./bk":73}],75:[function(require,module,exports){
 "use strict";
 
 var _ = require("../lodash"),
@@ -26854,7 +26536,7 @@ function shiftRanks(t, g, delta) {
   });
 }
 
-},{"../graphlib":60,"../lodash":63,"./util":81}],79:[function(require,module,exports){
+},{"../graphlib":57,"../lodash":60,"./util":78}],76:[function(require,module,exports){
 "use strict";
 
 var rankUtil = require("./util"),
@@ -26904,7 +26586,7 @@ function networkSimplexRanker(g) {
   networkSimplex(g);
 }
 
-},{"./feasible-tree":78,"./network-simplex":80,"./util":81}],80:[function(require,module,exports){
+},{"./feasible-tree":75,"./network-simplex":77,"./util":78}],77:[function(require,module,exports){
 "use strict";
 
 var _ = require("../lodash"),
@@ -27140,7 +26822,7 @@ function isDescendant(tree, vLabel, rootLabel) {
   return rootLabel.low <= vLabel.lim && vLabel.lim <= rootLabel.lim;
 }
 
-},{"../graphlib":60,"../lodash":63,"../util":82,"./feasible-tree":78,"./util":81}],81:[function(require,module,exports){
+},{"../graphlib":57,"../lodash":60,"../util":79,"./feasible-tree":75,"./util":78}],78:[function(require,module,exports){
 "use strict";
 
 var _ = require("../lodash");
@@ -27203,7 +26885,7 @@ function slack(g, e) {
   return g.node(e.w).rank - g.node(e.v).rank - g.edge(e).minlen;
 }
 
-},{"../lodash":63}],82:[function(require,module,exports){
+},{"../lodash":60}],79:[function(require,module,exports){
 "use strict";
 
 var _ = require("./lodash"),
@@ -27441,59 +27123,354 @@ function notime(name, fn) {
   return fn();
 }
 
-},{"./graphlib":60,"./lodash":63}],83:[function(require,module,exports){
+},{"./graphlib":57,"./lodash":60}],80:[function(require,module,exports){
 module.exports = "0.7.4";
 
-},{}],84:[function(require,module,exports){
+},{}],81:[function(require,module,exports){
+module.exports=require(30)
+},{"./lib":97,"./lib/alg":88,"./lib/json":98}],82:[function(require,module,exports){
+module.exports=require(31)
+},{"../lodash":99}],83:[function(require,module,exports){
+module.exports=require(32)
+},{"../lodash":99}],84:[function(require,module,exports){
 module.exports=require(33)
-},{"./lib":100,"./lib/alg":91,"./lib/json":101,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\index.js":33}],85:[function(require,module,exports){
+},{"../lodash":99,"./dijkstra":85}],85:[function(require,module,exports){
 module.exports=require(34)
-},{"../lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\components.js":34}],86:[function(require,module,exports){
+},{"../data/priority-queue":95,"../lodash":99}],86:[function(require,module,exports){
 module.exports=require(35)
-},{"../lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\dfs.js":35}],87:[function(require,module,exports){
+},{"../lodash":99,"./tarjan":93}],87:[function(require,module,exports){
 module.exports=require(36)
-},{"../lodash":102,"./dijkstra":88,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\dijkstra-all.js":36}],88:[function(require,module,exports){
+},{"../lodash":99}],88:[function(require,module,exports){
 module.exports=require(37)
-},{"../data/priority-queue":98,"../lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\dijkstra.js":37}],89:[function(require,module,exports){
+},{"./components":82,"./dijkstra":85,"./dijkstra-all":84,"./find-cycles":86,"./floyd-warshall":87,"./is-acyclic":89,"./postorder":90,"./preorder":91,"./prim":92,"./tarjan":93,"./topsort":94}],89:[function(require,module,exports){
 module.exports=require(38)
-},{"../lodash":102,"./tarjan":96,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\find-cycles.js":38}],90:[function(require,module,exports){
+},{"./topsort":94}],90:[function(require,module,exports){
 module.exports=require(39)
-},{"../lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\floyd-warshall.js":39}],91:[function(require,module,exports){
+},{"./dfs":83}],91:[function(require,module,exports){
 module.exports=require(40)
-},{"./components":85,"./dijkstra":88,"./dijkstra-all":87,"./find-cycles":89,"./floyd-warshall":90,"./is-acyclic":92,"./postorder":93,"./preorder":94,"./prim":95,"./tarjan":96,"./topsort":97,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\index.js":40}],92:[function(require,module,exports){
+},{"./dfs":83}],92:[function(require,module,exports){
 module.exports=require(41)
-},{"./topsort":97,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\is-acyclic.js":41}],93:[function(require,module,exports){
+},{"../data/priority-queue":95,"../graph":96,"../lodash":99}],93:[function(require,module,exports){
 module.exports=require(42)
-},{"./dfs":86,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\postorder.js":42}],94:[function(require,module,exports){
+},{"../lodash":99}],94:[function(require,module,exports){
 module.exports=require(43)
-},{"./dfs":86,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\preorder.js":43}],95:[function(require,module,exports){
+},{"../lodash":99}],95:[function(require,module,exports){
 module.exports=require(44)
-},{"../data/priority-queue":98,"../graph":99,"../lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\prim.js":44}],96:[function(require,module,exports){
+},{"../lodash":99}],96:[function(require,module,exports){
 module.exports=require(45)
-},{"../lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\tarjan.js":45}],97:[function(require,module,exports){
+},{"./lodash":99}],97:[function(require,module,exports){
 module.exports=require(46)
-},{"../lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\alg\\topsort.js":46}],98:[function(require,module,exports){
+},{"./graph":96,"./version":100}],98:[function(require,module,exports){
 module.exports=require(47)
-},{"../lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\data\\priority-queue.js":47}],99:[function(require,module,exports){
+},{"./graph":96,"./lodash":99}],99:[function(require,module,exports){
 module.exports=require(48)
-},{"./lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\graph.js":48}],100:[function(require,module,exports){
+},{"lodash":101}],100:[function(require,module,exports){
 module.exports=require(49)
-},{"./graph":99,"./version":103,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\index.js":49}],101:[function(require,module,exports){
+},{}],101:[function(require,module,exports){
 module.exports=require(50)
-},{"./graph":99,"./lodash":102,"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\json.js":50}],102:[function(require,module,exports){
-module.exports=require(51)
-},{"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\lodash.js":51,"lodash":104}],103:[function(require,module,exports){
-module.exports=require(52)
-},{"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\graphlib\\lib\\version.js":52}],104:[function(require,module,exports){
-module.exports=require(53)
-},{"C:\\Users\\knut\\source\\mermaid\\node_modules\\dagre-d3\\node_modules\\lodash\\index.js":53}],105:[function(require,module,exports){
+},{}],102:[function(require,module,exports){
+
+},{}],103:[function(require,module,exports){
+(function (process){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// resolves . and .. elements in a path array with directory names there
+// must be no slashes, empty elements, or device names (c:\) in the array
+// (so also no leading and trailing slashes - it does not distinguish
+// relative and absolute paths)
+function normalizeArray(parts, allowAboveRoot) {
+  // if the path tries to go above the root, `up` ends up > 0
+  var up = 0;
+  for (var i = parts.length - 1; i >= 0; i--) {
+    var last = parts[i];
+    if (last === '.') {
+      parts.splice(i, 1);
+    } else if (last === '..') {
+      parts.splice(i, 1);
+      up++;
+    } else if (up) {
+      parts.splice(i, 1);
+      up--;
+    }
+  }
+
+  // if the path is allowed to go above the root, restore leading ..s
+  if (allowAboveRoot) {
+    for (; up--; up) {
+      parts.unshift('..');
+    }
+  }
+
+  return parts;
+}
+
+// Split a filename into [root, dir, basename, ext], unix version
+// 'root' is just a slash, or nothing.
+var splitPathRe =
+    /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
+var splitPath = function(filename) {
+  return splitPathRe.exec(filename).slice(1);
+};
+
+// path.resolve([from ...], to)
+// posix version
+exports.resolve = function() {
+  var resolvedPath = '',
+      resolvedAbsolute = false;
+
+  for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
+    var path = (i >= 0) ? arguments[i] : process.cwd();
+
+    // Skip empty and invalid entries
+    if (typeof path !== 'string') {
+      throw new TypeError('Arguments to path.resolve must be strings');
+    } else if (!path) {
+      continue;
+    }
+
+    resolvedPath = path + '/' + resolvedPath;
+    resolvedAbsolute = path.charAt(0) === '/';
+  }
+
+  // At this point the path should be resolved to a full absolute path, but
+  // handle relative paths to be safe (might happen when process.cwd() fails)
+
+  // Normalize the path
+  resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
+    return !!p;
+  }), !resolvedAbsolute).join('/');
+
+  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
+};
+
+// path.normalize(path)
+// posix version
+exports.normalize = function(path) {
+  var isAbsolute = exports.isAbsolute(path),
+      trailingSlash = substr(path, -1) === '/';
+
+  // Normalize the path
+  path = normalizeArray(filter(path.split('/'), function(p) {
+    return !!p;
+  }), !isAbsolute).join('/');
+
+  if (!path && !isAbsolute) {
+    path = '.';
+  }
+  if (path && trailingSlash) {
+    path += '/';
+  }
+
+  return (isAbsolute ? '/' : '') + path;
+};
+
+// posix version
+exports.isAbsolute = function(path) {
+  return path.charAt(0) === '/';
+};
+
+// posix version
+exports.join = function() {
+  var paths = Array.prototype.slice.call(arguments, 0);
+  return exports.normalize(filter(paths, function(p, index) {
+    if (typeof p !== 'string') {
+      throw new TypeError('Arguments to path.join must be strings');
+    }
+    return p;
+  }).join('/'));
+};
+
+
+// path.relative(from, to)
+// posix version
+exports.relative = function(from, to) {
+  from = exports.resolve(from).substr(1);
+  to = exports.resolve(to).substr(1);
+
+  function trim(arr) {
+    var start = 0;
+    for (; start < arr.length; start++) {
+      if (arr[start] !== '') break;
+    }
+
+    var end = arr.length - 1;
+    for (; end >= 0; end--) {
+      if (arr[end] !== '') break;
+    }
+
+    if (start > end) return [];
+    return arr.slice(start, end - start + 1);
+  }
+
+  var fromParts = trim(from.split('/'));
+  var toParts = trim(to.split('/'));
+
+  var length = Math.min(fromParts.length, toParts.length);
+  var samePartsLength = length;
+  for (var i = 0; i < length; i++) {
+    if (fromParts[i] !== toParts[i]) {
+      samePartsLength = i;
+      break;
+    }
+  }
+
+  var outputParts = [];
+  for (var i = samePartsLength; i < fromParts.length; i++) {
+    outputParts.push('..');
+  }
+
+  outputParts = outputParts.concat(toParts.slice(samePartsLength));
+
+  return outputParts.join('/');
+};
+
+exports.sep = '/';
+exports.delimiter = ':';
+
+exports.dirname = function(path) {
+  var result = splitPath(path),
+      root = result[0],
+      dir = result[1];
+
+  if (!root && !dir) {
+    // No dirname whatsoever
+    return '.';
+  }
+
+  if (dir) {
+    // It has a dirname, strip trailing slash
+    dir = dir.substr(0, dir.length - 1);
+  }
+
+  return root + dir;
+};
+
+
+exports.basename = function(path, ext) {
+  var f = splitPath(path)[2];
+  // TODO: make this comparison case-insensitive on windows?
+  if (ext && f.substr(-1 * ext.length) === ext) {
+    f = f.substr(0, f.length - ext.length);
+  }
+  return f;
+};
+
+
+exports.extname = function(path) {
+  return splitPath(path)[3];
+};
+
+function filter (xs, f) {
+    if (xs.filter) return xs.filter(f);
+    var res = [];
+    for (var i = 0; i < xs.length; i++) {
+        if (f(xs[i], i, xs)) res.push(xs[i]);
+    }
+    return res;
+}
+
+// String.prototype.substr - negative index don't work in IE8
+var substr = 'ab'.substr(-1) === 'b'
+    ? function (str, start, len) { return str.substr(start, len) }
+    : function (str, start, len) {
+        if (start < 0) start = str.length + start;
+        return str.substr(start, len);
+    }
+;
+
+}).call(this,require("1YiZ5S"))
+},{"1YiZ5S":104}],104:[function(require,module,exports){
+// shim for using process in browser
+
+var process = module.exports = {};
+
+process.nextTick = (function () {
+    var canSetImmediate = typeof window !== 'undefined'
+    && window.setImmediate;
+    var canPost = typeof window !== 'undefined'
+    && window.postMessage && window.addEventListener
+    ;
+
+    if (canSetImmediate) {
+        return function (f) { return window.setImmediate(f) };
+    }
+
+    if (canPost) {
+        var queue = [];
+        window.addEventListener('message', function (ev) {
+            var source = ev.source;
+            if ((source === window || source === null) && ev.data === 'process-tick') {
+                ev.stopPropagation();
+                if (queue.length > 0) {
+                    var fn = queue.shift();
+                    fn();
+                }
+            }
+        }, true);
+
+        return function nextTick(fn) {
+            queue.push(fn);
+            window.postMessage('process-tick', '*');
+        };
+    }
+
+    return function nextTick(fn) {
+        setTimeout(fn, 0);
+    };
+})();
+
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+
+function noop() {}
+
+process.on = noop;
+process.addListener = noop;
+process.once = noop;
+process.off = noop;
+process.removeListener = noop;
+process.removeAllListeners = noop;
+process.emit = noop;
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+}
+
+// TODO(shtylman)
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+
+},{}],105:[function(require,module,exports){
 //! moment.js
-//! version : 2.10.6
+//! version : 2.11.1
 //! authors : Tim Wood, Iskren Chernev, Moment.js contributors
 //! license : MIT
 //! momentjs.com
 
-(function (global, factory) {
+;(function (global, factory) {
     typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
     typeof define === 'function' && define.amd ? define(factory) :
     global.moment = factory()
@@ -27610,39 +27587,45 @@ module.exports=require(53)
         return m;
     }
 
+    function isUndefined(input) {
+        return input === void 0;
+    }
+
+    // Plugins that add properties should also add the key here (null value),
+    // so we can properly clone ourselves.
     var momentProperties = utils_hooks__hooks.momentProperties = [];
 
     function copyConfig(to, from) {
         var i, prop, val;
 
-        if (typeof from._isAMomentObject !== 'undefined') {
+        if (!isUndefined(from._isAMomentObject)) {
             to._isAMomentObject = from._isAMomentObject;
         }
-        if (typeof from._i !== 'undefined') {
+        if (!isUndefined(from._i)) {
             to._i = from._i;
         }
-        if (typeof from._f !== 'undefined') {
+        if (!isUndefined(from._f)) {
             to._f = from._f;
         }
-        if (typeof from._l !== 'undefined') {
+        if (!isUndefined(from._l)) {
             to._l = from._l;
         }
-        if (typeof from._strict !== 'undefined') {
+        if (!isUndefined(from._strict)) {
             to._strict = from._strict;
         }
-        if (typeof from._tzm !== 'undefined') {
+        if (!isUndefined(from._tzm)) {
             to._tzm = from._tzm;
         }
-        if (typeof from._isUTC !== 'undefined') {
+        if (!isUndefined(from._isUTC)) {
             to._isUTC = from._isUTC;
         }
-        if (typeof from._offset !== 'undefined') {
+        if (!isUndefined(from._offset)) {
             to._offset = from._offset;
         }
-        if (typeof from._pf !== 'undefined') {
+        if (!isUndefined(from._pf)) {
             to._pf = getParsingFlags(from);
         }
-        if (typeof from._locale !== 'undefined') {
+        if (!isUndefined(from._locale)) {
             to._locale = from._locale;
         }
 
@@ -27650,7 +27633,7 @@ module.exports=require(53)
             for (i in momentProperties) {
                 prop = momentProperties[i];
                 val = from[prop];
-                if (typeof val !== 'undefined') {
+                if (!isUndefined(val)) {
                     to[prop] = val;
                 }
             }
@@ -27697,6 +27680,7 @@ module.exports=require(53)
         return value;
     }
 
+    // compare two arrays, return the number of differences
     function compareArrays(array1, array2, dontConvert) {
         var len = Math.min(array1.length, array2.length),
             lengthDiff = Math.abs(array1.length - array2.length),
@@ -27714,6 +27698,7 @@ module.exports=require(53)
     function Locale() {
     }
 
+    // internal storage for locale config files
     var locales = {};
     var globalLocale;
 
@@ -27751,7 +27736,7 @@ module.exports=require(53)
     function loadLocale(name) {
         var oldLocale = null;
         // TODO: Find a better way to register and load all the locales in Node
-        if (!locales[name] && typeof module !== 'undefined' &&
+        if (!locales[name] && (typeof module !== 'undefined') &&
                 module && module.exports) {
             try {
                 oldLocale = globalLocale._abbr;
@@ -27770,7 +27755,7 @@ module.exports=require(53)
     function locale_locales__getSetGlobalLocale (key, values) {
         var data;
         if (key) {
-            if (typeof values === 'undefined') {
+            if (isUndefined(values)) {
                 data = locale_locales__getLocale(key);
             }
             else {
@@ -27855,6 +27840,10 @@ module.exports=require(53)
         return normalizedInput;
     }
 
+    function isFunction(input) {
+        return input instanceof Function || Object.prototype.toString.call(input) === '[object Function]';
+    }
+
     function makeGetSet (unit, keepTime) {
         return function (value) {
             if (value != null) {
@@ -27868,11 +27857,14 @@ module.exports=require(53)
     }
 
     function get_set__get (mom, unit) {
-        return mom._d['get' + (mom._isUTC ? 'UTC' : '') + unit]();
+        return mom.isValid() ?
+            mom._d['get' + (mom._isUTC ? 'UTC' : '') + unit]() : NaN;
     }
 
     function get_set__set (mom, unit, value) {
-        return mom._d['set' + (mom._isUTC ? 'UTC' : '') + unit](value);
+        if (mom.isValid()) {
+            mom._d['set' + (mom._isUTC ? 'UTC' : '') + unit](value);
+        }
     }
 
     // MOMENTS
@@ -27885,7 +27877,7 @@ module.exports=require(53)
             }
         } else {
             units = normalizeUnits(units);
-            if (typeof this[units] === 'function') {
+            if (isFunction(this[units])) {
                 return this[units](value);
             }
         }
@@ -27900,7 +27892,7 @@ module.exports=require(53)
             Math.pow(10, Math.max(0, zerosToFill)).toString().substr(1) + absNumber;
     }
 
-    var formattingTokens = /(\[[^\[]*\])|(\\)?(Mo|MM?M?M?|Do|DDDo|DD?D?D?|ddd?d?|do?|w[o|w]?|W[o|W]?|Q|YYYYYY|YYYYY|YYYY|YY|gg(ggg?)?|GG(GGG?)?|e|E|a|A|hh?|HH?|mm?|ss?|S{1,9}|x|X|zz?|ZZ?|.)/g;
+    var formattingTokens = /(\[[^\[]*\])|(\\)?([Hh]mm(ss)?|Mo|MM?M?M?|Do|DDDo|DD?D?D?|ddd?d?|do?|w[o|w]?|W[o|W]?|Qo?|YYYYYY|YYYYY|YYYY|YY|gg(ggg?)?|GG(GGG?)?|e|E|a|A|hh?|HH?|mm?|ss?|S{1,9}|x|X|zz?|ZZ?|.)/g;
 
     var localFormattingTokens = /(\[[^\[]*\])|(\\)?(LTS|LT|LL?L?L?|l{1,4})/g;
 
@@ -27996,6 +27988,8 @@ module.exports=require(53)
     var match4         = /\d{4}/;         //    0000 - 9999
     var match6         = /[+-]?\d{6}/;    // -999999 - 999999
     var match1to2      = /\d\d?/;         //       0 - 99
+    var match3to4      = /\d\d\d\d?/;     //     999 - 9999
+    var match5to6      = /\d\d\d\d\d\d?/; //   99999 - 999999
     var match1to3      = /\d{1,3}/;       //       0 - 999
     var match1to4      = /\d{1,4}/;       //       0 - 9999
     var match1to6      = /[+-]?\d{1,6}/;  // -999999 - 999999
@@ -28004,23 +27998,19 @@ module.exports=require(53)
     var matchSigned    = /[+-]?\d+/;      //    -inf - inf
 
     var matchOffset    = /Z|[+-]\d\d:?\d\d/gi; // +00:00 -00:00 +0000 -0000 or Z
+    var matchShortOffset = /Z|[+-]\d\d(?::?\d\d)?/gi; // +00 -00 +00:00 -00:00 +0000 -0000 or Z
 
     var matchTimestamp = /[+-]?\d+(\.\d{1,3})?/; // 123456789 123456789.123
 
     // any word (or two) characters or numbers including two/three word month in arabic.
+    // includes scottish gaelic two word and hyphenated months
     var matchWord = /[0-9]*['a-z\u00A0-\u05FF\u0700-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]+|[\u0600-\u06FF\/]+(\s*?[\u0600-\u06FF]+){1,2}/i;
+
 
     var regexes = {};
 
-    function isFunction (sth) {
-        // https://github.com/moment/moment/issues/2325
-        return typeof sth === 'function' &&
-            Object.prototype.toString.call(sth) === '[object Function]';
-    }
-
-
     function addRegexToken (token, regex, strictRegex) {
-        regexes[token] = isFunction(regex) ? regex : function (isStrict) {
+        regexes[token] = isFunction(regex) ? regex : function (isStrict, localeData) {
             return (isStrict && strictRegex) ? strictRegex : regex;
         };
     }
@@ -28035,9 +28025,13 @@ module.exports=require(53)
 
     // Code from http://stackoverflow.com/questions/3561493/is-there-a-regexp-escape-function-in-javascript
     function unescapeFormat(s) {
-        return s.replace('\\', '').replace(/\\(\[)|\\(\])|\[([^\]\[]*)\]|\\(.)/g, function (matched, p1, p2, p3, p4) {
+        return regexEscape(s.replace('\\', '').replace(/\\(\[)|\\(\])|\[([^\]\[]*)\]|\\(.)/g, function (matched, p1, p2, p3, p4) {
             return p1 || p2 || p3 || p4;
-        }).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        }));
+    }
+
+    function regexEscape(s) {
+        return s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     }
 
     var tokens = {};
@@ -28077,6 +28071,8 @@ module.exports=require(53)
     var MINUTE = 4;
     var SECOND = 5;
     var MILLISECOND = 6;
+    var WEEK = 7;
+    var WEEKDAY = 8;
 
     function daysInMonth(year, month) {
         return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -28104,8 +28100,12 @@ module.exports=require(53)
 
     addRegexToken('M',    match1to2);
     addRegexToken('MM',   match1to2, match2);
-    addRegexToken('MMM',  matchWord);
-    addRegexToken('MMMM', matchWord);
+    addRegexToken('MMM',  function (isStrict, locale) {
+        return locale.monthsShortRegex(isStrict);
+    });
+    addRegexToken('MMMM', function (isStrict, locale) {
+        return locale.monthsRegex(isStrict);
+    });
 
     addParseToken(['M', 'MM'], function (input, array) {
         array[MONTH] = toInt(input) - 1;
@@ -28123,14 +28123,17 @@ module.exports=require(53)
 
     // LOCALES
 
+    var MONTHS_IN_FORMAT = /D[oD]?(\[[^\[\]]*\]|\s+)+MMMM?/;
     var defaultLocaleMonths = 'January_February_March_April_May_June_July_August_September_October_November_December'.split('_');
-    function localeMonths (m) {
-        return this._months[m.month()];
+    function localeMonths (m, format) {
+        return isArray(this._months) ? this._months[m.month()] :
+            this._months[MONTHS_IN_FORMAT.test(format) ? 'format' : 'standalone'][m.month()];
     }
 
     var defaultLocaleMonthsShort = 'Jan_Feb_Mar_Apr_May_Jun_Jul_Aug_Sep_Oct_Nov_Dec'.split('_');
-    function localeMonthsShort (m) {
-        return this._monthsShort[m.month()];
+    function localeMonthsShort (m, format) {
+        return isArray(this._monthsShort) ? this._monthsShort[m.month()] :
+            this._monthsShort[MONTHS_IN_FORMAT.test(format) ? 'format' : 'standalone'][m.month()];
     }
 
     function localeMonthsParse (monthName, format, strict) {
@@ -28169,6 +28172,11 @@ module.exports=require(53)
     function setMonth (mom, value) {
         var dayOfMonth;
 
+        if (!mom.isValid()) {
+            // No op
+            return mom;
+        }
+
         // TODO: Move this out of here!
         if (typeof value === 'string') {
             value = mom.localeData().monthsParse(value);
@@ -28197,6 +28205,72 @@ module.exports=require(53)
         return daysInMonth(this.year(), this.month());
     }
 
+    var defaultMonthsShortRegex = matchWord;
+    function monthsShortRegex (isStrict) {
+        if (this._monthsParseExact) {
+            if (!hasOwnProp(this, '_monthsRegex')) {
+                computeMonthsParse.call(this);
+            }
+            if (isStrict) {
+                return this._monthsShortStrictRegex;
+            } else {
+                return this._monthsShortRegex;
+            }
+        } else {
+            return this._monthsShortStrictRegex && isStrict ?
+                this._monthsShortStrictRegex : this._monthsShortRegex;
+        }
+    }
+
+    var defaultMonthsRegex = matchWord;
+    function monthsRegex (isStrict) {
+        if (this._monthsParseExact) {
+            if (!hasOwnProp(this, '_monthsRegex')) {
+                computeMonthsParse.call(this);
+            }
+            if (isStrict) {
+                return this._monthsStrictRegex;
+            } else {
+                return this._monthsRegex;
+            }
+        } else {
+            return this._monthsStrictRegex && isStrict ?
+                this._monthsStrictRegex : this._monthsRegex;
+        }
+    }
+
+    function computeMonthsParse () {
+        function cmpLenRev(a, b) {
+            return b.length - a.length;
+        }
+
+        var shortPieces = [], longPieces = [], mixedPieces = [],
+            i, mom;
+        for (i = 0; i < 12; i++) {
+            // make the regex if we don't have it already
+            mom = create_utc__createUTC([2000, i]);
+            shortPieces.push(this.monthsShort(mom, ''));
+            longPieces.push(this.months(mom, ''));
+            mixedPieces.push(this.months(mom, ''));
+            mixedPieces.push(this.monthsShort(mom, ''));
+        }
+        // Sorting makes sure if one month (or abbr) is a prefix of another it
+        // will match the longer piece.
+        shortPieces.sort(cmpLenRev);
+        longPieces.sort(cmpLenRev);
+        mixedPieces.sort(cmpLenRev);
+        for (i = 0; i < 12; i++) {
+            shortPieces[i] = regexEscape(shortPieces[i]);
+            longPieces[i] = regexEscape(longPieces[i]);
+            mixedPieces[i] = regexEscape(mixedPieces[i]);
+        }
+
+        this._monthsRegex = new RegExp('^(' + mixedPieces.join('|') + ')', 'i');
+        this._monthsShortRegex = this._monthsRegex;
+        this._monthsStrictRegex = new RegExp('^(' + longPieces.join('|') + ')$', 'i');
+        this._monthsShortStrictRegex = new RegExp('^(' + shortPieces.join('|') + ')$', 'i');
+    }
+
     function checkOverflow (m) {
         var overflow;
         var a = m._a;
@@ -28214,6 +28288,12 @@ module.exports=require(53)
             if (getParsingFlags(m)._overflowDayOfYear && (overflow < YEAR || overflow > DATE)) {
                 overflow = DATE;
             }
+            if (getParsingFlags(m)._overflowWeeks && overflow === -1) {
+                overflow = WEEK;
+            }
+            if (getParsingFlags(m)._overflowWeekday && overflow === -1) {
+                overflow = WEEKDAY;
+            }
 
             getParsingFlags(m).overflow = overflow;
         }
@@ -28222,7 +28302,8 @@ module.exports=require(53)
     }
 
     function warn(msg) {
-        if (utils_hooks__hooks.suppressDeprecationWarnings === false && typeof console !== 'undefined' && console.warn) {
+        if (utils_hooks__hooks.suppressDeprecationWarnings === false &&
+                (typeof console !==  'undefined') && console.warn) {
             console.warn('Deprecation warning: ' + msg);
         }
     }
@@ -28232,7 +28313,7 @@ module.exports=require(53)
 
         return extend(function () {
             if (firstTime) {
-                warn(msg + '\n' + (new Error()).stack);
+                warn(msg + '\nArguments: ' + Array.prototype.slice.call(arguments).join(', ') + '\n' + (new Error()).stack);
                 firstTime = false;
             }
             return fn.apply(this, arguments);
@@ -28250,22 +28331,39 @@ module.exports=require(53)
 
     utils_hooks__hooks.suppressDeprecationWarnings = false;
 
-    var from_string__isoRegex = /^\s*(?:[+-]\d{6}|\d{4})-(?:(\d\d-\d\d)|(W\d\d$)|(W\d\d-\d)|(\d\d\d))((T| )(\d\d(:\d\d(:\d\d(\.\d+)?)?)?)?([\+\-]\d\d(?::?\d\d)?|\s*Z)?)?$/;
+    // iso 8601 regex
+    // 0000-00-00 0000-W00 or 0000-W00-0 + T + 00 or 00:00 or 00:00:00 or 00:00:00.000 + +00:00 or +0000 or +00)
+    var extendedIsoRegex = /^\s*((?:[+-]\d{6}|\d{4})-(?:\d\d-\d\d|W\d\d-\d|W\d\d|\d\d\d|\d\d))(?:(T| )(\d\d(?::\d\d(?::\d\d(?:[.,]\d+)?)?)?)([\+\-]\d\d(?::?\d\d)?|\s*Z)?)?/;
+    var basicIsoRegex = /^\s*((?:[+-]\d{6}|\d{4})(?:\d\d\d\d|W\d\d\d|W\d\d|\d\d\d|\d\d))(?:(T| )(\d\d(?:\d\d(?:\d\d(?:[.,]\d+)?)?)?)([\+\-]\d\d(?::?\d\d)?|\s*Z)?)?/;
+
+    var tzRegex = /Z|[+-]\d\d(?::?\d\d)?/;
 
     var isoDates = [
-        ['YYYYYY-MM-DD', /[+-]\d{6}-\d{2}-\d{2}/],
-        ['YYYY-MM-DD', /\d{4}-\d{2}-\d{2}/],
-        ['GGGG-[W]WW-E', /\d{4}-W\d{2}-\d/],
-        ['GGGG-[W]WW', /\d{4}-W\d{2}/],
-        ['YYYY-DDD', /\d{4}-\d{3}/]
+        ['YYYYYY-MM-DD', /[+-]\d{6}-\d\d-\d\d/],
+        ['YYYY-MM-DD', /\d{4}-\d\d-\d\d/],
+        ['GGGG-[W]WW-E', /\d{4}-W\d\d-\d/],
+        ['GGGG-[W]WW', /\d{4}-W\d\d/, false],
+        ['YYYY-DDD', /\d{4}-\d{3}/],
+        ['YYYY-MM', /\d{4}-\d\d/, false],
+        ['YYYYYYMMDD', /[+-]\d{10}/],
+        ['YYYYMMDD', /\d{8}/],
+        // YYYYMM is NOT allowed by the standard
+        ['GGGG[W]WWE', /\d{4}W\d{3}/],
+        ['GGGG[W]WW', /\d{4}W\d{2}/, false],
+        ['YYYYDDD', /\d{7}/]
     ];
 
     // iso time formats and regexes
     var isoTimes = [
-        ['HH:mm:ss.SSSS', /(T| )\d\d:\d\d:\d\d\.\d+/],
-        ['HH:mm:ss', /(T| )\d\d:\d\d:\d\d/],
-        ['HH:mm', /(T| )\d\d:\d\d/],
-        ['HH', /(T| )\d\d/]
+        ['HH:mm:ss.SSSS', /\d\d:\d\d:\d\d\.\d+/],
+        ['HH:mm:ss,SSSS', /\d\d:\d\d:\d\d,\d+/],
+        ['HH:mm:ss', /\d\d:\d\d:\d\d/],
+        ['HH:mm', /\d\d:\d\d/],
+        ['HHmmss.SSSS', /\d\d\d\d\d\d\.\d+/],
+        ['HHmmss,SSSS', /\d\d\d\d\d\d,\d+/],
+        ['HHmmss', /\d\d\d\d\d\d/],
+        ['HHmm', /\d\d\d\d/],
+        ['HH', /\d\d/]
     ];
 
     var aspNetJsonRegex = /^\/?Date\((\-?\d+)/i;
@@ -28274,26 +28372,49 @@ module.exports=require(53)
     function configFromISO(config) {
         var i, l,
             string = config._i,
-            match = from_string__isoRegex.exec(string);
+            match = extendedIsoRegex.exec(string) || basicIsoRegex.exec(string),
+            allowTime, dateFormat, timeFormat, tzFormat;
 
         if (match) {
             getParsingFlags(config).iso = true;
+
             for (i = 0, l = isoDates.length; i < l; i++) {
-                if (isoDates[i][1].exec(string)) {
-                    config._f = isoDates[i][0];
+                if (isoDates[i][1].exec(match[1])) {
+                    dateFormat = isoDates[i][0];
+                    allowTime = isoDates[i][2] !== false;
                     break;
                 }
             }
-            for (i = 0, l = isoTimes.length; i < l; i++) {
-                if (isoTimes[i][1].exec(string)) {
-                    // match[6] should be 'T' or space
-                    config._f += (match[6] || ' ') + isoTimes[i][0];
-                    break;
+            if (dateFormat == null) {
+                config._isValid = false;
+                return;
+            }
+            if (match[3]) {
+                for (i = 0, l = isoTimes.length; i < l; i++) {
+                    if (isoTimes[i][1].exec(match[3])) {
+                        // match[2] should be 'T' or space
+                        timeFormat = (match[2] || ' ') + isoTimes[i][0];
+                        break;
+                    }
+                }
+                if (timeFormat == null) {
+                    config._isValid = false;
+                    return;
                 }
             }
-            if (string.match(matchOffset)) {
-                config._f += 'Z';
+            if (!allowTime && timeFormat != null) {
+                config._isValid = false;
+                return;
             }
+            if (match[4]) {
+                if (tzRegex.exec(match[4])) {
+                    tzFormat = 'Z';
+                } else {
+                    config._isValid = false;
+                    return;
+                }
+            }
+            config._f = dateFormat + (timeFormat || '') + (tzFormat || '');
             configFromStringAndFormat(config);
         } else {
             config._isValid = false;
@@ -28331,8 +28452,8 @@ module.exports=require(53)
         //http://stackoverflow.com/questions/181348/instantiating-a-javascript-object-by-calling-prototype-constructor-apply
         var date = new Date(y, m, d, h, M, s, ms);
 
-        //the date constructor doesn't accept years < 1970
-        if (y < 1970) {
+        //the date constructor remaps years 0-99 to 1900-1999
+        if (y < 100 && y >= 0 && isFinite(date.getFullYear())) {
             date.setFullYear(y);
         }
         return date;
@@ -28340,11 +28461,20 @@ module.exports=require(53)
 
     function createUTCDate (y) {
         var date = new Date(Date.UTC.apply(null, arguments));
-        if (y < 1970) {
+
+        //the Date.UTC function remaps years 0-99 to 1900-1999
+        if (y < 100 && y >= 0 && isFinite(date.getUTCFullYear())) {
             date.setUTCFullYear(y);
         }
         return date;
     }
+
+    // FORMATTING
+
+    addFormatToken('Y', 0, 0, function () {
+        var y = this.year();
+        return y <= 9999 ? '' + y : '+' + y;
+    });
 
     addFormatToken(0, ['YY', 2], 0, function () {
         return this.year() % 100;
@@ -28373,6 +28503,9 @@ module.exports=require(53)
     addParseToken('YY', function (input, array) {
         array[YEAR] = utils_hooks__hooks.parseTwoDigitYear(input);
     });
+    addParseToken('Y', function (input, array) {
+        array[YEAR] = parseInt(input, 10);
+    });
 
     // HELPERS
 
@@ -28398,124 +28531,66 @@ module.exports=require(53)
         return isLeapYear(this.year());
     }
 
-    addFormatToken('w', ['ww', 2], 'wo', 'week');
-    addFormatToken('W', ['WW', 2], 'Wo', 'isoWeek');
+    // start-of-first-week - start-of-year
+    function firstWeekOffset(year, dow, doy) {
+        var // first-week day -- which january is always in the first week (4 for iso, 1 for other)
+            fwd = 7 + dow - doy,
+            // first-week day local weekday -- which local weekday is fwd
+            fwdlw = (7 + createUTCDate(year, 0, fwd).getUTCDay() - dow) % 7;
 
-    // ALIASES
-
-    addUnitAlias('week', 'w');
-    addUnitAlias('isoWeek', 'W');
-
-    // PARSING
-
-    addRegexToken('w',  match1to2);
-    addRegexToken('ww', match1to2, match2);
-    addRegexToken('W',  match1to2);
-    addRegexToken('WW', match1to2, match2);
-
-    addWeekParseToken(['w', 'ww', 'W', 'WW'], function (input, week, config, token) {
-        week[token.substr(0, 1)] = toInt(input);
-    });
-
-    // HELPERS
-
-    // firstDayOfWeek       0 = sun, 6 = sat
-    //                      the day of the week that starts the week
-    //                      (usually sunday or monday)
-    // firstDayOfWeekOfYear 0 = sun, 6 = sat
-    //                      the first week is the week that contains the first
-    //                      of this day of the week
-    //                      (eg. ISO weeks use thursday (4))
-    function weekOfYear(mom, firstDayOfWeek, firstDayOfWeekOfYear) {
-        var end = firstDayOfWeekOfYear - firstDayOfWeek,
-            daysToDayOfWeek = firstDayOfWeekOfYear - mom.day(),
-            adjustedMoment;
-
-
-        if (daysToDayOfWeek > end) {
-            daysToDayOfWeek -= 7;
-        }
-
-        if (daysToDayOfWeek < end - 7) {
-            daysToDayOfWeek += 7;
-        }
-
-        adjustedMoment = local__createLocal(mom).add(daysToDayOfWeek, 'd');
-        return {
-            week: Math.ceil(adjustedMoment.dayOfYear() / 7),
-            year: adjustedMoment.year()
-        };
+        return -fwdlw + fwd - 1;
     }
-
-    // LOCALES
-
-    function localeWeek (mom) {
-        return weekOfYear(mom, this._week.dow, this._week.doy).week;
-    }
-
-    var defaultLocaleWeek = {
-        dow : 0, // Sunday is the first day of the week.
-        doy : 6  // The week that contains Jan 1st is the first week of the year.
-    };
-
-    function localeFirstDayOfWeek () {
-        return this._week.dow;
-    }
-
-    function localeFirstDayOfYear () {
-        return this._week.doy;
-    }
-
-    // MOMENTS
-
-    function getSetWeek (input) {
-        var week = this.localeData().week(this);
-        return input == null ? week : this.add((input - week) * 7, 'd');
-    }
-
-    function getSetISOWeek (input) {
-        var week = weekOfYear(this, 1, 4).week;
-        return input == null ? week : this.add((input - week) * 7, 'd');
-    }
-
-    addFormatToken('DDD', ['DDDD', 3], 'DDDo', 'dayOfYear');
-
-    // ALIASES
-
-    addUnitAlias('dayOfYear', 'DDD');
-
-    // PARSING
-
-    addRegexToken('DDD',  match1to3);
-    addRegexToken('DDDD', match3);
-    addParseToken(['DDD', 'DDDD'], function (input, array, config) {
-        config._dayOfYear = toInt(input);
-    });
-
-    // HELPERS
 
     //http://en.wikipedia.org/wiki/ISO_week_date#Calculating_a_date_given_the_year.2C_week_number_and_weekday
-    function dayOfYearFromWeeks(year, week, weekday, firstDayOfWeekOfYear, firstDayOfWeek) {
-        var week1Jan = 6 + firstDayOfWeek - firstDayOfWeekOfYear, janX = createUTCDate(year, 0, 1 + week1Jan), d = janX.getUTCDay(), dayOfYear;
-        if (d < firstDayOfWeek) {
-            d += 7;
+    function dayOfYearFromWeeks(year, week, weekday, dow, doy) {
+        var localWeekday = (7 + weekday - dow) % 7,
+            weekOffset = firstWeekOffset(year, dow, doy),
+            dayOfYear = 1 + 7 * (week - 1) + localWeekday + weekOffset,
+            resYear, resDayOfYear;
+
+        if (dayOfYear <= 0) {
+            resYear = year - 1;
+            resDayOfYear = daysInYear(resYear) + dayOfYear;
+        } else if (dayOfYear > daysInYear(year)) {
+            resYear = year + 1;
+            resDayOfYear = dayOfYear - daysInYear(year);
+        } else {
+            resYear = year;
+            resDayOfYear = dayOfYear;
         }
 
-        weekday = weekday != null ? 1 * weekday : firstDayOfWeek;
-
-        dayOfYear = 1 + week1Jan + 7 * (week - 1) - d + weekday;
-
         return {
-            year: dayOfYear > 0 ? year : year - 1,
-            dayOfYear: dayOfYear > 0 ?  dayOfYear : daysInYear(year - 1) + dayOfYear
+            year: resYear,
+            dayOfYear: resDayOfYear
         };
     }
 
-    // MOMENTS
+    function weekOfYear(mom, dow, doy) {
+        var weekOffset = firstWeekOffset(mom.year(), dow, doy),
+            week = Math.floor((mom.dayOfYear() - weekOffset - 1) / 7) + 1,
+            resWeek, resYear;
 
-    function getSetDayOfYear (input) {
-        var dayOfYear = Math.round((this.clone().startOf('day') - this.clone().startOf('year')) / 864e5) + 1;
-        return input == null ? dayOfYear : this.add((input - dayOfYear), 'd');
+        if (week < 1) {
+            resYear = mom.year() - 1;
+            resWeek = week + weeksInYear(resYear, dow, doy);
+        } else if (week > weeksInYear(mom.year(), dow, doy)) {
+            resWeek = week - weeksInYear(mom.year(), dow, doy);
+            resYear = mom.year() + 1;
+        } else {
+            resYear = mom.year();
+            resWeek = week;
+        }
+
+        return {
+            week: resWeek,
+            year: resYear
+        };
+    }
+
+    function weeksInYear(year, dow, doy) {
+        var weekOffset = firstWeekOffset(year, dow, doy),
+            weekOffsetNext = firstWeekOffset(year + 1, dow, doy);
+        return (daysInYear(year) - weekOffset + weekOffsetNext) / 7;
     }
 
     // Pick the first defined of two or three arguments.
@@ -28530,11 +28605,12 @@ module.exports=require(53)
     }
 
     function currentDateArray(config) {
-        var now = new Date();
+        // hooks is actually the exported moment object
+        var nowValue = new Date(utils_hooks__hooks.now());
         if (config._useUTC) {
-            return [now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()];
+            return [nowValue.getUTCFullYear(), nowValue.getUTCMonth(), nowValue.getUTCDate()];
         }
-        return [now.getFullYear(), now.getMonth(), now.getDate()];
+        return [nowValue.getFullYear(), nowValue.getMonth(), nowValue.getDate()];
     }
 
     // convert an array to a date.
@@ -28604,7 +28680,7 @@ module.exports=require(53)
     }
 
     function dayOfYearFromWeekInfo(config) {
-        var w, weekYear, week, weekday, dow, doy, temp;
+        var w, weekYear, week, weekday, dow, doy, temp, weekdayOverflow;
 
         w = config._w;
         if (w.GG != null || w.W != null || w.E != null) {
@@ -28618,6 +28694,9 @@ module.exports=require(53)
             weekYear = defaults(w.GG, config._a[YEAR], weekOfYear(local__createLocal(), 1, 4).year);
             week = defaults(w.W, 1);
             weekday = defaults(w.E, 1);
+            if (weekday < 1 || weekday > 7) {
+                weekdayOverflow = true;
+            }
         } else {
             dow = config._locale._week.dow;
             doy = config._locale._week.doy;
@@ -28628,23 +28707,32 @@ module.exports=require(53)
             if (w.d != null) {
                 // weekday -- low day numbers are considered next week
                 weekday = w.d;
-                if (weekday < dow) {
-                    ++week;
+                if (weekday < 0 || weekday > 6) {
+                    weekdayOverflow = true;
                 }
             } else if (w.e != null) {
                 // local weekday -- counting starts from begining of week
                 weekday = w.e + dow;
+                if (w.e < 0 || w.e > 6) {
+                    weekdayOverflow = true;
+                }
             } else {
                 // default to begining of week
                 weekday = dow;
             }
         }
-        temp = dayOfYearFromWeeks(weekYear, week, weekday, doy, dow);
-
-        config._a[YEAR] = temp.year;
-        config._dayOfYear = temp.dayOfYear;
+        if (week < 1 || week > weeksInYear(weekYear, dow, doy)) {
+            getParsingFlags(config)._overflowWeeks = true;
+        } else if (weekdayOverflow != null) {
+            getParsingFlags(config)._overflowWeekday = true;
+        } else {
+            temp = dayOfYearFromWeeks(weekYear, week, weekday, dow, doy);
+            config._a[YEAR] = temp.year;
+            config._dayOfYear = temp.dayOfYear;
+        }
     }
 
+    // constant that refers to the ISO standard
     utils_hooks__hooks.ISO_8601 = function () {};
 
     // date from string and format string
@@ -28669,6 +28757,8 @@ module.exports=require(53)
         for (i = 0; i < tokens.length; i++) {
             token = tokens[i];
             parsedInput = (string.match(getParseRegexForToken(token, config)) || [])[0];
+            // console.log('token', token, 'parsedInput', parsedInput,
+            //         'regex', getParseRegexForToken(token, config));
             if (parsedInput) {
                 skipped = string.substr(0, string.indexOf(parsedInput));
                 if (skipped.length > 0) {
@@ -28737,6 +28827,7 @@ module.exports=require(53)
         }
     }
 
+    // date from string and array of format strings
     function configFromStringAndArray(config) {
         var tempConfig,
             bestMoment,
@@ -28787,7 +28878,9 @@ module.exports=require(53)
         }
 
         var i = normalizeObjectUnits(config._i);
-        config._a = [i.year, i.month, i.day || i.date, i.hour, i.minute, i.second, i.millisecond];
+        config._a = map([i.year, i.month, i.day || i.date, i.hour, i.minute, i.second, i.millisecond], function (obj) {
+            return obj && parseInt(obj, 10);
+        });
 
         configFromArray(config);
     }
@@ -28829,13 +28922,17 @@ module.exports=require(53)
             configFromInput(config);
         }
 
+        if (!valid__isValid(config)) {
+            config._d = null;
+        }
+
         return config;
     }
 
     function configFromInput(config) {
         var input = config._i;
         if (input === undefined) {
-            config._d = new Date();
+            config._d = new Date(utils_hooks__hooks.now());
         } else if (isDate(input)) {
             config._d = new Date(+input);
         } else if (typeof input === 'string') {
@@ -28882,7 +28979,11 @@ module.exports=require(53)
          'moment().min is deprecated, use moment.min instead. https://github.com/moment/moment/issues/1548',
          function () {
              var other = local__createLocal.apply(null, arguments);
-             return other < this ? this : other;
+             if (this.isValid() && other.isValid()) {
+                 return other < this ? this : other;
+             } else {
+                 return valid__createInvalid();
+             }
          }
      );
 
@@ -28890,7 +28991,11 @@ module.exports=require(53)
         'moment().max is deprecated, use moment.max instead. https://github.com/moment/moment/issues/1548',
         function () {
             var other = local__createLocal.apply(null, arguments);
-            return other > this ? this : other;
+            if (this.isValid() && other.isValid()) {
+                return other > this ? this : other;
+            } else {
+                return valid__createInvalid();
+            }
         }
     );
 
@@ -28928,6 +29033,10 @@ module.exports=require(53)
 
         return pickBy('isAfter', args);
     }
+
+    var now = function () {
+        return Date.now ? Date.now() : +(new Date());
+    };
 
     function Duration (duration) {
         var normalizedInput = normalizeObjectUnits(duration),
@@ -28968,6 +29077,8 @@ module.exports=require(53)
         return obj instanceof Duration;
     }
 
+    // FORMATTING
+
     function offset (token, separator) {
         addFormatToken(token, 0, 0, function () {
             var offset = this.utcOffset();
@@ -28985,11 +29096,11 @@ module.exports=require(53)
 
     // PARSING
 
-    addRegexToken('Z',  matchOffset);
-    addRegexToken('ZZ', matchOffset);
+    addRegexToken('Z',  matchShortOffset);
+    addRegexToken('ZZ', matchShortOffset);
     addParseToken(['Z', 'ZZ'], function (input, array, config) {
         config._useUTC = true;
-        config._tzm = offsetFromString(input);
+        config._tzm = offsetFromString(matchShortOffset, input);
     });
 
     // HELPERS
@@ -28999,8 +29110,8 @@ module.exports=require(53)
     // '-1530'  > ['-15', '30']
     var chunkOffset = /([\+\-]|\d\d)/gi;
 
-    function offsetFromString(string) {
-        var matches = ((string || '').match(matchOffset) || []);
+    function offsetFromString(matcher, string) {
+        var matches = ((string || '').match(matcher) || []);
         var chunk   = matches[matches.length - 1] || [];
         var parts   = (chunk + '').match(chunkOffset) || ['-', 0, 0];
         var minutes = +(parts[1] * 60) + toInt(parts[2]);
@@ -29050,11 +29161,13 @@ module.exports=require(53)
     function getSetOffset (input, keepLocalTime) {
         var offset = this._offset || 0,
             localAdjust;
+        if (!this.isValid()) {
+            return input != null ? this : NaN;
+        }
         if (input != null) {
             if (typeof input === 'string') {
-                input = offsetFromString(input);
-            }
-            if (Math.abs(input) < 16) {
+                input = offsetFromString(matchShortOffset, input);
+            } else if (Math.abs(input) < 16) {
                 input = input * 60;
             }
             if (!this._isUTC && keepLocalTime) {
@@ -29114,12 +29227,15 @@ module.exports=require(53)
         if (this._tzm) {
             this.utcOffset(this._tzm);
         } else if (typeof this._i === 'string') {
-            this.utcOffset(offsetFromString(this._i));
+            this.utcOffset(offsetFromString(matchOffset, this._i));
         }
         return this;
     }
 
     function hasAlignedHourOffset (input) {
+        if (!this.isValid()) {
+            return false;
+        }
         input = input ? local__createLocal(input).utcOffset() : 0;
 
         return (this.utcOffset() - input) % 60 === 0;
@@ -29133,7 +29249,7 @@ module.exports=require(53)
     }
 
     function isDaylightSavingTimeShifted () {
-        if (typeof this._isDSTShifted !== 'undefined') {
+        if (!isUndefined(this._isDSTShifted)) {
             return this._isDSTShifted;
         }
 
@@ -29154,22 +29270,23 @@ module.exports=require(53)
     }
 
     function isLocal () {
-        return !this._isUTC;
+        return this.isValid() ? !this._isUTC : false;
     }
 
     function isUtcOffset () {
-        return this._isUTC;
+        return this.isValid() ? this._isUTC : false;
     }
 
     function isUtc () {
-        return this._isUTC && this._offset === 0;
+        return this.isValid() ? this._isUTC && this._offset === 0 : false;
     }
 
-    var aspNetRegex = /(\-)?(?:(\d*)\.)?(\d+)\:(\d+)(?:\:(\d+)\.?(\d{3})?)?/;
+    // ASP.NET json date format regex
+    var aspNetRegex = /(\-)?(?:(\d*)[. ])?(\d+)\:(\d+)(?:\:(\d+)\.?(\d{3})?)?/;
 
     // from http://docs.closure-library.googlecode.com/git/closure_goog_date_date.js.source.html
     // somewhat more in line with 4.4.3.2 2004 spec, but allows decimal anywhere
-    var create__isoRegex = /^(-)?P(?:(?:([0-9,.]*)Y)?(?:([0-9,.]*)M)?(?:([0-9,.]*)D)?(?:T(?:([0-9,.]*)H)?(?:([0-9,.]*)M)?(?:([0-9,.]*)S)?)?|([0-9,.]*)W)$/;
+    var isoRegex = /^(-)?P(?:(?:([0-9,.]*)Y)?(?:([0-9,.]*)M)?(?:([0-9,.]*)D)?(?:T(?:([0-9,.]*)H)?(?:([0-9,.]*)M)?(?:([0-9,.]*)S)?)?|([0-9,.]*)W)$/;
 
     function create__createDuration (input, key) {
         var duration = input,
@@ -29202,7 +29319,7 @@ module.exports=require(53)
                 s  : toInt(match[SECOND])      * sign,
                 ms : toInt(match[MILLISECOND]) * sign
             };
-        } else if (!!(match = create__isoRegex.exec(input))) {
+        } else if (!!(match = isoRegex.exec(input))) {
             sign = (match[1] === '-') ? -1 : 1;
             duration = {
                 y : parseIso(match[2], sign),
@@ -29259,6 +29376,10 @@ module.exports=require(53)
 
     function momentsDifference(base, other) {
         var res;
+        if (!(base.isValid() && other.isValid())) {
+            return {milliseconds: 0, months: 0};
+        }
+
         other = cloneWithOffset(other, base);
         if (base.isBefore(other)) {
             res = positiveMomentsDifference(base, other);
@@ -29271,6 +29392,7 @@ module.exports=require(53)
         return res;
     }
 
+    // TODO: remove 'name' arg after deprecation is removed
     function createAdder(direction, name) {
         return function (val, period) {
             var dur, tmp;
@@ -29291,6 +29413,12 @@ module.exports=require(53)
         var milliseconds = duration._milliseconds,
             days = duration._days,
             months = duration._months;
+
+        if (!mom.isValid()) {
+            // No op
+            return;
+        }
+
         updateOffset = updateOffset == null ? true : updateOffset;
 
         if (milliseconds) {
@@ -29322,7 +29450,10 @@ module.exports=require(53)
                 diff < 1 ? 'sameDay' :
                 diff < 2 ? 'nextDay' :
                 diff < 7 ? 'nextWeek' : 'sameElse';
-        return this.format(formats && formats[format] || this.localeData().calendar(format, this, local__createLocal(now)));
+
+        var output = formats && (isFunction(formats[format]) ? formats[format]() : formats[format]);
+
+        return this.format(output || this.localeData().calendar(format, this, local__createLocal(now)));
     }
 
     function clone () {
@@ -29330,26 +29461,28 @@ module.exports=require(53)
     }
 
     function isAfter (input, units) {
-        var inputMs;
-        units = normalizeUnits(typeof units !== 'undefined' ? units : 'millisecond');
+        var localInput = isMoment(input) ? input : local__createLocal(input);
+        if (!(this.isValid() && localInput.isValid())) {
+            return false;
+        }
+        units = normalizeUnits(!isUndefined(units) ? units : 'millisecond');
         if (units === 'millisecond') {
-            input = isMoment(input) ? input : local__createLocal(input);
-            return +this > +input;
+            return +this > +localInput;
         } else {
-            inputMs = isMoment(input) ? +input : +local__createLocal(input);
-            return inputMs < +this.clone().startOf(units);
+            return +localInput < +this.clone().startOf(units);
         }
     }
 
     function isBefore (input, units) {
-        var inputMs;
-        units = normalizeUnits(typeof units !== 'undefined' ? units : 'millisecond');
+        var localInput = isMoment(input) ? input : local__createLocal(input);
+        if (!(this.isValid() && localInput.isValid())) {
+            return false;
+        }
+        units = normalizeUnits(!isUndefined(units) ? units : 'millisecond');
         if (units === 'millisecond') {
-            input = isMoment(input) ? input : local__createLocal(input);
-            return +this < +input;
+            return +this < +localInput;
         } else {
-            inputMs = isMoment(input) ? +input : +local__createLocal(input);
-            return +this.clone().endOf(units) < inputMs;
+            return +this.clone().endOf(units) < +localInput;
         }
     }
 
@@ -29358,21 +29491,44 @@ module.exports=require(53)
     }
 
     function isSame (input, units) {
-        var inputMs;
+        var localInput = isMoment(input) ? input : local__createLocal(input),
+            inputMs;
+        if (!(this.isValid() && localInput.isValid())) {
+            return false;
+        }
         units = normalizeUnits(units || 'millisecond');
         if (units === 'millisecond') {
-            input = isMoment(input) ? input : local__createLocal(input);
-            return +this === +input;
+            return +this === +localInput;
         } else {
-            inputMs = +local__createLocal(input);
+            inputMs = +localInput;
             return +(this.clone().startOf(units)) <= inputMs && inputMs <= +(this.clone().endOf(units));
         }
     }
 
+    function isSameOrAfter (input, units) {
+        return this.isSame(input, units) || this.isAfter(input,units);
+    }
+
+    function isSameOrBefore (input, units) {
+        return this.isSame(input, units) || this.isBefore(input,units);
+    }
+
     function diff (input, units, asFloat) {
-        var that = cloneWithOffset(input, this),
-            zoneDelta = (that.utcOffset() - this.utcOffset()) * 6e4,
+        var that,
+            zoneDelta,
             delta, output;
+
+        if (!this.isValid()) {
+            return NaN;
+        }
+
+        that = cloneWithOffset(input, this);
+
+        if (!that.isValid()) {
+            return NaN;
+        }
+
+        zoneDelta = (that.utcOffset() - this.utcOffset()) * 6e4;
 
         units = normalizeUnits(units);
 
@@ -29424,7 +29580,7 @@ module.exports=require(53)
     function moment_format__toISOString () {
         var m = this.clone().utc();
         if (0 < m.year() && m.year() <= 9999) {
-            if ('function' === typeof Date.prototype.toISOString) {
+            if (isFunction(Date.prototype.toISOString)) {
                 // native implementation is ~50x faster, use it when we can
                 return this.toDate().toISOString();
             } else {
@@ -29441,10 +29597,13 @@ module.exports=require(53)
     }
 
     function from (time, withoutSuffix) {
-        if (!this.isValid()) {
+        if (this.isValid() &&
+                ((isMoment(time) && time.isValid()) ||
+                 local__createLocal(time).isValid())) {
+            return create__createDuration({to: this, from: time}).locale(this.locale()).humanize(!withoutSuffix);
+        } else {
             return this.localeData().invalidDate();
         }
-        return create__createDuration({to: this, from: time}).locale(this.locale()).humanize(!withoutSuffix);
     }
 
     function fromNow (withoutSuffix) {
@@ -29452,16 +29611,22 @@ module.exports=require(53)
     }
 
     function to (time, withoutSuffix) {
-        if (!this.isValid()) {
+        if (this.isValid() &&
+                ((isMoment(time) && time.isValid()) ||
+                 local__createLocal(time).isValid())) {
+            return create__createDuration({from: this, to: time}).locale(this.locale()).humanize(!withoutSuffix);
+        } else {
             return this.localeData().invalidDate();
         }
-        return create__createDuration({from: this, to: time}).locale(this.locale()).humanize(!withoutSuffix);
     }
 
     function toNow (withoutSuffix) {
         return this.to(local__createLocal(), withoutSuffix);
     }
 
+    // If passed a locale key, it will set the locale for this
+    // instance.  Otherwise, it will return the locale configuration
+    // variables for this instance.
     function locale (key) {
         var newLocaleData;
 
@@ -29572,6 +29737,11 @@ module.exports=require(53)
         };
     }
 
+    function toJSON () {
+        // JSON.stringify(new Date(NaN)) === 'null'
+        return this.isValid() ? this.toISOString() : 'null';
+    }
+
     function moment_valid__isValid () {
         return valid__isValid(this);
     }
@@ -29583,6 +29753,18 @@ module.exports=require(53)
     function invalidAt () {
         return getParsingFlags(this).overflow;
     }
+
+    function creationData() {
+        return {
+            input: this._i,
+            format: this._f,
+            locale: this._locale,
+            isUTC: this._isUTC,
+            strict: this._strict
+        };
+    }
+
+    // FORMATTING
 
     addFormatToken(0, ['gg', 2], 0, function () {
         return this.weekYear() % 100;
@@ -29625,22 +29807,20 @@ module.exports=require(53)
         week[token] = utils_hooks__hooks.parseTwoDigitYear(input);
     });
 
-    // HELPERS
-
-    function weeksInYear(year, dow, doy) {
-        return weekOfYear(local__createLocal([year, 11, 31 + dow - doy]), dow, doy).week;
-    }
-
     // MOMENTS
 
     function getSetWeekYear (input) {
-        var year = weekOfYear(this, this.localeData()._week.dow, this.localeData()._week.doy).year;
-        return input == null ? year : this.add((input - year), 'y');
+        return getSetWeekYearHelper.call(this,
+                input,
+                this.week(),
+                this.weekday(),
+                this.localeData()._week.dow,
+                this.localeData()._week.doy);
     }
 
     function getSetISOWeekYear (input) {
-        var year = weekOfYear(this, 1, 4).year;
-        return input == null ? year : this.add((input - year), 'y');
+        return getSetWeekYearHelper.call(this,
+                input, this.isoWeek(), this.isoWeekday(), 1, 4);
     }
 
     function getISOWeeksInYear () {
@@ -29652,7 +29832,33 @@ module.exports=require(53)
         return weeksInYear(this.year(), weekInfo.dow, weekInfo.doy);
     }
 
-    addFormatToken('Q', 0, 0, 'quarter');
+    function getSetWeekYearHelper(input, week, weekday, dow, doy) {
+        var weeksTarget;
+        if (input == null) {
+            return weekOfYear(this, dow, doy).year;
+        } else {
+            weeksTarget = weeksInYear(input, dow, doy);
+            if (week > weeksTarget) {
+                week = weeksTarget;
+            }
+            return setWeekAll.call(this, input, week, weekday, dow, doy);
+        }
+    }
+
+    function setWeekAll(weekYear, week, weekday, dow, doy) {
+        var dayOfYearData = dayOfYearFromWeeks(weekYear, week, weekday, dow, doy),
+            date = createUTCDate(dayOfYearData.year, 0, dayOfYearData.dayOfYear);
+
+        // console.log("got", weekYear, week, weekday, "set", date.toISOString());
+        this.year(date.getUTCFullYear());
+        this.month(date.getUTCMonth());
+        this.date(date.getUTCDate());
+        return this;
+    }
+
+    // FORMATTING
+
+    addFormatToken('Q', 0, 'Qo', 'quarter');
 
     // ALIASES
 
@@ -29670,6 +29876,62 @@ module.exports=require(53)
     function getSetQuarter (input) {
         return input == null ? Math.ceil((this.month() + 1) / 3) : this.month((input - 1) * 3 + this.month() % 3);
     }
+
+    // FORMATTING
+
+    addFormatToken('w', ['ww', 2], 'wo', 'week');
+    addFormatToken('W', ['WW', 2], 'Wo', 'isoWeek');
+
+    // ALIASES
+
+    addUnitAlias('week', 'w');
+    addUnitAlias('isoWeek', 'W');
+
+    // PARSING
+
+    addRegexToken('w',  match1to2);
+    addRegexToken('ww', match1to2, match2);
+    addRegexToken('W',  match1to2);
+    addRegexToken('WW', match1to2, match2);
+
+    addWeekParseToken(['w', 'ww', 'W', 'WW'], function (input, week, config, token) {
+        week[token.substr(0, 1)] = toInt(input);
+    });
+
+    // HELPERS
+
+    // LOCALES
+
+    function localeWeek (mom) {
+        return weekOfYear(mom, this._week.dow, this._week.doy).week;
+    }
+
+    var defaultLocaleWeek = {
+        dow : 0, // Sunday is the first day of the week.
+        doy : 6  // The week that contains Jan 1st is the first week of the year.
+    };
+
+    function localeFirstDayOfWeek () {
+        return this._week.dow;
+    }
+
+    function localeFirstDayOfYear () {
+        return this._week.doy;
+    }
+
+    // MOMENTS
+
+    function getSetWeek (input) {
+        var week = this.localeData().week(this);
+        return input == null ? week : this.add((input - week) * 7, 'd');
+    }
+
+    function getSetISOWeek (input) {
+        var week = weekOfYear(this, 1, 4).week;
+        return input == null ? week : this.add((input - week) * 7, 'd');
+    }
+
+    // FORMATTING
 
     addFormatToken('D', ['DD', 2], 'Do', 'date');
 
@@ -29693,6 +29955,8 @@ module.exports=require(53)
     // MOMENTS
 
     var getSetDayOfMonth = makeGetSet('Date', true);
+
+    // FORMATTING
 
     addFormatToken('d', 0, 'do', 'day');
 
@@ -29726,8 +29990,8 @@ module.exports=require(53)
     addRegexToken('ddd',  matchWord);
     addRegexToken('dddd', matchWord);
 
-    addWeekParseToken(['dd', 'ddd', 'dddd'], function (input, week, config) {
-        var weekday = config._locale.weekdaysParse(input);
+    addWeekParseToken(['dd', 'ddd', 'dddd'], function (input, week, config, token) {
+        var weekday = config._locale.weekdaysParse(input, token, config._strict);
         // if we didn't get a weekday name, mark the date as invalid
         if (weekday != null) {
             week.d = weekday;
@@ -29762,8 +30026,9 @@ module.exports=require(53)
     // LOCALES
 
     var defaultLocaleWeekdays = 'Sunday_Monday_Tuesday_Wednesday_Thursday_Friday_Saturday'.split('_');
-    function localeWeekdays (m) {
-        return this._weekdays[m.day()];
+    function localeWeekdays (m, format) {
+        return isArray(this._weekdays) ? this._weekdays[m.day()] :
+            this._weekdays[this._weekdays.isFormat.test(format) ? 'format' : 'standalone'][m.day()];
     }
 
     var defaultLocaleWeekdaysShort = 'Sun_Mon_Tue_Wed_Thu_Fri_Sat'.split('_');
@@ -29776,20 +30041,37 @@ module.exports=require(53)
         return this._weekdaysMin[m.day()];
     }
 
-    function localeWeekdaysParse (weekdayName) {
+    function localeWeekdaysParse (weekdayName, format, strict) {
         var i, mom, regex;
 
-        this._weekdaysParse = this._weekdaysParse || [];
+        if (!this._weekdaysParse) {
+            this._weekdaysParse = [];
+            this._minWeekdaysParse = [];
+            this._shortWeekdaysParse = [];
+            this._fullWeekdaysParse = [];
+        }
 
         for (i = 0; i < 7; i++) {
             // make the regex if we don't have it already
+
+            mom = local__createLocal([2000, 1]).day(i);
+            if (strict && !this._fullWeekdaysParse[i]) {
+                this._fullWeekdaysParse[i] = new RegExp('^' + this.weekdays(mom, '').replace('.', '\.?') + '$', 'i');
+                this._shortWeekdaysParse[i] = new RegExp('^' + this.weekdaysShort(mom, '').replace('.', '\.?') + '$', 'i');
+                this._minWeekdaysParse[i] = new RegExp('^' + this.weekdaysMin(mom, '').replace('.', '\.?') + '$', 'i');
+            }
             if (!this._weekdaysParse[i]) {
-                mom = local__createLocal([2000, 1]).day(i);
                 regex = '^' + this.weekdays(mom, '') + '|^' + this.weekdaysShort(mom, '') + '|^' + this.weekdaysMin(mom, '');
                 this._weekdaysParse[i] = new RegExp(regex.replace('.', ''), 'i');
             }
             // test the regex
-            if (this._weekdaysParse[i].test(weekdayName)) {
+            if (strict && format === 'dddd' && this._fullWeekdaysParse[i].test(weekdayName)) {
+                return i;
+            } else if (strict && format === 'ddd' && this._shortWeekdaysParse[i].test(weekdayName)) {
+                return i;
+            } else if (strict && format === 'dd' && this._minWeekdaysParse[i].test(weekdayName)) {
+                return i;
+            } else if (!strict && this._weekdaysParse[i].test(weekdayName)) {
                 return i;
             }
         }
@@ -29798,6 +30080,9 @@ module.exports=require(53)
     // MOMENTS
 
     function getSetDayOfWeek (input) {
+        if (!this.isValid()) {
+            return input != null ? this : NaN;
+        }
         var day = this._isUTC ? this._d.getUTCDay() : this._d.getDay();
         if (input != null) {
             input = parseWeekday(input, this.localeData());
@@ -29808,20 +30093,73 @@ module.exports=require(53)
     }
 
     function getSetLocaleDayOfWeek (input) {
+        if (!this.isValid()) {
+            return input != null ? this : NaN;
+        }
         var weekday = (this.day() + 7 - this.localeData()._week.dow) % 7;
         return input == null ? weekday : this.add(input - weekday, 'd');
     }
 
     function getSetISODayOfWeek (input) {
+        if (!this.isValid()) {
+            return input != null ? this : NaN;
+        }
         // behaves the same as moment#day except
         // as a getter, returns 7 instead of 0 (1-7 range instead of 0-6)
         // as a setter, sunday should belong to the previous week.
         return input == null ? this.day() || 7 : this.day(this.day() % 7 ? input : input - 7);
     }
 
-    addFormatToken('H', ['HH', 2], 0, 'hour');
-    addFormatToken('h', ['hh', 2], 0, function () {
+    // FORMATTING
+
+    addFormatToken('DDD', ['DDDD', 3], 'DDDo', 'dayOfYear');
+
+    // ALIASES
+
+    addUnitAlias('dayOfYear', 'DDD');
+
+    // PARSING
+
+    addRegexToken('DDD',  match1to3);
+    addRegexToken('DDDD', match3);
+    addParseToken(['DDD', 'DDDD'], function (input, array, config) {
+        config._dayOfYear = toInt(input);
+    });
+
+    // HELPERS
+
+    // MOMENTS
+
+    function getSetDayOfYear (input) {
+        var dayOfYear = Math.round((this.clone().startOf('day') - this.clone().startOf('year')) / 864e5) + 1;
+        return input == null ? dayOfYear : this.add((input - dayOfYear), 'd');
+    }
+
+    // FORMATTING
+
+    function hFormat() {
         return this.hours() % 12 || 12;
+    }
+
+    addFormatToken('H', ['HH', 2], 0, 'hour');
+    addFormatToken('h', ['hh', 2], 0, hFormat);
+
+    addFormatToken('hmm', 0, 0, function () {
+        return '' + hFormat.apply(this) + zeroFill(this.minutes(), 2);
+    });
+
+    addFormatToken('hmmss', 0, 0, function () {
+        return '' + hFormat.apply(this) + zeroFill(this.minutes(), 2) +
+            zeroFill(this.seconds(), 2);
+    });
+
+    addFormatToken('Hmm', 0, 0, function () {
+        return '' + this.hours() + zeroFill(this.minutes(), 2);
+    });
+
+    addFormatToken('Hmmss', 0, 0, function () {
+        return '' + this.hours() + zeroFill(this.minutes(), 2) +
+            zeroFill(this.seconds(), 2);
     });
 
     function meridiem (token, lowercase) {
@@ -29850,6 +30188,11 @@ module.exports=require(53)
     addRegexToken('HH', match1to2, match2);
     addRegexToken('hh', match1to2, match2);
 
+    addRegexToken('hmm', match3to4);
+    addRegexToken('hmmss', match5to6);
+    addRegexToken('Hmm', match3to4);
+    addRegexToken('Hmmss', match5to6);
+
     addParseToken(['H', 'HH'], HOUR);
     addParseToken(['a', 'A'], function (input, array, config) {
         config._isPm = config._locale.isPM(input);
@@ -29858,6 +30201,32 @@ module.exports=require(53)
     addParseToken(['h', 'hh'], function (input, array, config) {
         array[HOUR] = toInt(input);
         getParsingFlags(config).bigHour = true;
+    });
+    addParseToken('hmm', function (input, array, config) {
+        var pos = input.length - 2;
+        array[HOUR] = toInt(input.substr(0, pos));
+        array[MINUTE] = toInt(input.substr(pos));
+        getParsingFlags(config).bigHour = true;
+    });
+    addParseToken('hmmss', function (input, array, config) {
+        var pos1 = input.length - 4;
+        var pos2 = input.length - 2;
+        array[HOUR] = toInt(input.substr(0, pos1));
+        array[MINUTE] = toInt(input.substr(pos1, 2));
+        array[SECOND] = toInt(input.substr(pos2));
+        getParsingFlags(config).bigHour = true;
+    });
+    addParseToken('Hmm', function (input, array, config) {
+        var pos = input.length - 2;
+        array[HOUR] = toInt(input.substr(0, pos));
+        array[MINUTE] = toInt(input.substr(pos));
+    });
+    addParseToken('Hmmss', function (input, array, config) {
+        var pos1 = input.length - 4;
+        var pos2 = input.length - 2;
+        array[HOUR] = toInt(input.substr(0, pos1));
+        array[MINUTE] = toInt(input.substr(pos1, 2));
+        array[SECOND] = toInt(input.substr(pos2));
     });
 
     // LOCALES
@@ -29886,6 +30255,8 @@ module.exports=require(53)
     // this rule.
     var getSetHour = makeGetSet('Hours', true);
 
+    // FORMATTING
+
     addFormatToken('m', ['mm', 2], 0, 'minute');
 
     // ALIASES
@@ -29902,6 +30273,8 @@ module.exports=require(53)
 
     var getSetMinute = makeGetSet('Minutes', false);
 
+    // FORMATTING
+
     addFormatToken('s', ['ss', 2], 0, 'second');
 
     // ALIASES
@@ -29917,6 +30290,8 @@ module.exports=require(53)
     // MOMENTS
 
     var getSetSecond = makeGetSet('Seconds', false);
+
+    // FORMATTING
 
     addFormatToken('S', 0, 0, function () {
         return ~~(this.millisecond() / 100);
@@ -29973,6 +30348,8 @@ module.exports=require(53)
 
     var getSetMillisecond = makeGetSet('Milliseconds', false);
 
+    // FORMATTING
+
     addFormatToken('z',  0, 0, 'zoneAbbr');
     addFormatToken('zz', 0, 0, 'zoneName');
 
@@ -29988,40 +30365,43 @@ module.exports=require(53)
 
     var momentPrototype__proto = Moment.prototype;
 
-    momentPrototype__proto.add          = add_subtract__add;
-    momentPrototype__proto.calendar     = moment_calendar__calendar;
-    momentPrototype__proto.clone        = clone;
-    momentPrototype__proto.diff         = diff;
-    momentPrototype__proto.endOf        = endOf;
-    momentPrototype__proto.format       = format;
-    momentPrototype__proto.from         = from;
-    momentPrototype__proto.fromNow      = fromNow;
-    momentPrototype__proto.to           = to;
-    momentPrototype__proto.toNow        = toNow;
-    momentPrototype__proto.get          = getSet;
-    momentPrototype__proto.invalidAt    = invalidAt;
-    momentPrototype__proto.isAfter      = isAfter;
-    momentPrototype__proto.isBefore     = isBefore;
-    momentPrototype__proto.isBetween    = isBetween;
-    momentPrototype__proto.isSame       = isSame;
-    momentPrototype__proto.isValid      = moment_valid__isValid;
-    momentPrototype__proto.lang         = lang;
-    momentPrototype__proto.locale       = locale;
-    momentPrototype__proto.localeData   = localeData;
-    momentPrototype__proto.max          = prototypeMax;
-    momentPrototype__proto.min          = prototypeMin;
-    momentPrototype__proto.parsingFlags = parsingFlags;
-    momentPrototype__proto.set          = getSet;
-    momentPrototype__proto.startOf      = startOf;
-    momentPrototype__proto.subtract     = add_subtract__subtract;
-    momentPrototype__proto.toArray      = toArray;
-    momentPrototype__proto.toObject     = toObject;
-    momentPrototype__proto.toDate       = toDate;
-    momentPrototype__proto.toISOString  = moment_format__toISOString;
-    momentPrototype__proto.toJSON       = moment_format__toISOString;
-    momentPrototype__proto.toString     = toString;
-    momentPrototype__proto.unix         = unix;
-    momentPrototype__proto.valueOf      = to_type__valueOf;
+    momentPrototype__proto.add               = add_subtract__add;
+    momentPrototype__proto.calendar          = moment_calendar__calendar;
+    momentPrototype__proto.clone             = clone;
+    momentPrototype__proto.diff              = diff;
+    momentPrototype__proto.endOf             = endOf;
+    momentPrototype__proto.format            = format;
+    momentPrototype__proto.from              = from;
+    momentPrototype__proto.fromNow           = fromNow;
+    momentPrototype__proto.to                = to;
+    momentPrototype__proto.toNow             = toNow;
+    momentPrototype__proto.get               = getSet;
+    momentPrototype__proto.invalidAt         = invalidAt;
+    momentPrototype__proto.isAfter           = isAfter;
+    momentPrototype__proto.isBefore          = isBefore;
+    momentPrototype__proto.isBetween         = isBetween;
+    momentPrototype__proto.isSame            = isSame;
+    momentPrototype__proto.isSameOrAfter     = isSameOrAfter;
+    momentPrototype__proto.isSameOrBefore    = isSameOrBefore;
+    momentPrototype__proto.isValid           = moment_valid__isValid;
+    momentPrototype__proto.lang              = lang;
+    momentPrototype__proto.locale            = locale;
+    momentPrototype__proto.localeData        = localeData;
+    momentPrototype__proto.max               = prototypeMax;
+    momentPrototype__proto.min               = prototypeMin;
+    momentPrototype__proto.parsingFlags      = parsingFlags;
+    momentPrototype__proto.set               = getSet;
+    momentPrototype__proto.startOf           = startOf;
+    momentPrototype__proto.subtract          = add_subtract__subtract;
+    momentPrototype__proto.toArray           = toArray;
+    momentPrototype__proto.toObject          = toObject;
+    momentPrototype__proto.toDate            = toDate;
+    momentPrototype__proto.toISOString       = moment_format__toISOString;
+    momentPrototype__proto.toJSON            = toJSON;
+    momentPrototype__proto.toString          = toString;
+    momentPrototype__proto.unix              = unix;
+    momentPrototype__proto.valueOf           = to_type__valueOf;
+    momentPrototype__proto.creationData      = creationData;
 
     // Year
     momentPrototype__proto.year       = getSetYear;
@@ -30107,7 +30487,7 @@ module.exports=require(53)
 
     function locale_calendar__calendar (key, mom, now) {
         var output = this._calendar[key];
-        return typeof output === 'function' ? output.call(mom, now) : output;
+        return isFunction(output) ? output.call(mom, now) : output;
     }
 
     var defaultLongDateFormat = {
@@ -30169,21 +30549,21 @@ module.exports=require(53)
 
     function relative__relativeTime (number, withoutSuffix, string, isFuture) {
         var output = this._relativeTime[string];
-        return (typeof output === 'function') ?
+        return (isFunction(output)) ?
             output(number, withoutSuffix, string, isFuture) :
             output.replace(/%d/i, number);
     }
 
     function pastFuture (diff, output) {
         var format = this._relativeTime[diff > 0 ? 'future' : 'past'];
-        return typeof format === 'function' ? format(output) : format.replace(/%s/i, output);
+        return isFunction(format) ? format(output) : format.replace(/%s/i, output);
     }
 
     function locale_set__set (config) {
         var prop, i;
         for (i in config) {
             prop = config[i];
-            if (typeof prop === 'function') {
+            if (isFunction(prop)) {
                 this[i] = prop;
             } else {
                 this['_' + i] = prop;
@@ -30213,11 +30593,15 @@ module.exports=require(53)
     prototype__proto.set             = locale_set__set;
 
     // Month
-    prototype__proto.months       =        localeMonths;
-    prototype__proto._months      = defaultLocaleMonths;
-    prototype__proto.monthsShort  =        localeMonthsShort;
-    prototype__proto._monthsShort = defaultLocaleMonthsShort;
-    prototype__proto.monthsParse  =        localeMonthsParse;
+    prototype__proto.months            =        localeMonths;
+    prototype__proto._months           = defaultLocaleMonths;
+    prototype__proto.monthsShort       =        localeMonthsShort;
+    prototype__proto._monthsShort      = defaultLocaleMonthsShort;
+    prototype__proto.monthsParse       =        localeMonthsParse;
+    prototype__proto._monthsRegex      = defaultMonthsRegex;
+    prototype__proto.monthsRegex       = monthsRegex;
+    prototype__proto._monthsShortRegex = defaultMonthsShortRegex;
+    prototype__proto.monthsShortRegex  = monthsShortRegex;
 
     // Week
     prototype__proto.week = localeWeek;
@@ -30505,15 +30889,15 @@ module.exports=require(53)
         var years    = round(duration.as('y'));
 
         var a = seconds < thresholds.s && ['s', seconds]  ||
-                minutes === 1          && ['m']           ||
+                minutes <= 1           && ['m']           ||
                 minutes < thresholds.m && ['mm', minutes] ||
-                hours   === 1          && ['h']           ||
+                hours   <= 1           && ['h']           ||
                 hours   < thresholds.h && ['hh', hours]   ||
-                days    === 1          && ['d']           ||
+                days    <= 1           && ['d']           ||
                 days    < thresholds.d && ['dd', days]    ||
-                months  === 1          && ['M']           ||
+                months  <= 1           && ['M']           ||
                 months  < thresholds.M && ['MM', months]  ||
-                years   === 1          && ['y']           || ['yy', years];
+                years   <= 1           && ['y']           || ['yy', years];
 
         a[2] = withoutSuffix;
         a[3] = +posNegDuration > 0;
@@ -30634,6 +31018,8 @@ module.exports=require(53)
 
     // Side effect imports
 
+    // FORMATTING
+
     addFormatToken('X', 0, 0, 'unix');
     addFormatToken('x', 0, 0, 'valueOf');
 
@@ -30651,13 +31037,14 @@ module.exports=require(53)
     // Side effect imports
 
 
-    utils_hooks__hooks.version = '2.10.6';
+    utils_hooks__hooks.version = '2.11.1';
 
     setHookCallback(local__createLocal);
 
     utils_hooks__hooks.fn                    = momentPrototype;
     utils_hooks__hooks.min                   = min;
     utils_hooks__hooks.max                   = max;
+    utils_hooks__hooks.now                   = now;
     utils_hooks__hooks.utc                   = create_utc__createUTC;
     utils_hooks__hooks.unix                  = moment__createUnix;
     utils_hooks__hooks.months                = lists__listMonths;
@@ -30676,6 +31063,7 @@ module.exports=require(53)
     utils_hooks__hooks.weekdaysShort         = lists__listWeekdaysShort;
     utils_hooks__hooks.normalizeUnits        = normalizeUnits;
     utils_hooks__hooks.relativeTimeThreshold = duration_humanize__getSetRelativeTimeThreshold;
+    utils_hooks__hooks.prototype             = momentPrototype;
 
     var _moment = utils_hooks__hooks;
 
@@ -30810,23 +31198,21 @@ module.exports={
 },{}],107:[function(require,module,exports){
 /* global window */
 //log.debug('Setting up d3');
-'use strict';
-
 var d3;
 
 if (require) {
-    try {
-        d3 = require('d3');
-    } catch (e) {
-        //log.debug('Exception ... but ok');
-        //log.debug(e);
-    }
+  try {
+    d3 = require('d3');
+  } catch (e) {
+  	//log.debug('Exception ... but ok');
+  	//log.debug(e);
+  }
 }
 
 //log.debug(d3);
 
 if (!d3) {
-    //if(typeof window !== 'undefined')
+  //if(typeof window !== 'undefined')
     d3 = window.d3;
 }
 
@@ -30850,7 +31236,7 @@ module.exports = d3;
 
  */
 
-(function () {
+(function() {
 
     // set this variable to a string value to always force a particular
     // wrap method for development purposes, for example to check tspan
@@ -30863,20 +31249,20 @@ module.exports = d3;
     // exit immediately if something in this location
     // has already been defined; the plugin will defer to whatever
     // else you're doing in your code
-    if (d3.selection.prototype.textwrap) {
+    if(d3.selection.prototype.textwrap) {
         return false;
     }
 
     // double check the force_wrap_method flag
     // and reset if someone screwed up the above
     // settings
-    if (typeof force_wrap_method == 'undefined') {
+    if(typeof force_wrap_method == 'undefined') {
         var force_wrap_method = false;
     }
 
     // create the plugin method twice, both for regular use
     // and again for use inside the enter() selection
-    d3.selection.prototype.textwrap = d3.selection.enter.prototype.textwrap = function (bounds, padding) {
+    d3.selection.prototype.textwrap = d3.selection.enter.prototype.textwrap = function(bounds, padding) {
 
         // default value of padding is zero if it's undefined
         var padding = parseInt(padding) || 0;
@@ -30890,396 +31276,421 @@ module.exports = d3;
 
         // extract wrap boundaries from any d3-selected rect and return them
         // in a format that matches the simpler object argument option
-        var extract_bounds = function extract_bounds(bounds) {
+        var extract_bounds = function(bounds) {
             // discard the nested array wrappers added by d3
             var bounding_rect = bounds[0][0];
             // sanitize the svg element name so we can test against it
             var element_type = bounding_rect.tagName.toString();
             // if it's not a rect, exit
-            if (element_type !== 'rect') {
+            if(element_type !== 'rect') {
                 return false;
                 // if it's a rect, proceed to extracting the position attributes
             } else {
-                    var bounds_extracted = {};
-                    bounds_extracted.x = d3.select(bounding_rect).attr('x') || 0;
-                    bounds_extracted.y = d3.select(bounding_rect).attr('y') || 0;
-                    bounds_extracted.width = d3.select(bounding_rect).attr('width') || 0;
-                    bounds_extracted.height = d3.select(bounding_rect).attr('height') || 0;
-                    // also pass along the getter function
-                    bounds_extracted.attr = bounds.attr;
-                }
+                var bounds_extracted = {};
+                bounds_extracted.x = d3.select(bounding_rect).attr('x') || 0;
+                bounds_extracted.y = d3.select(bounding_rect).attr('y') || 0;
+                bounds_extracted.width = d3.select(bounding_rect).attr('width') || 0;
+                bounds_extracted.height = d3.select(bounding_rect).attr('height') || 0;
+                // also pass along the getter function
+                bounds_extracted.attr = bounds.attr;
+            }
             return bounds_extracted;
-        };
+        }
 
         // double check the input argument for the wrapping
         // boundaries to make sure it actually contains all
         // the information we'll need in order to wrap successfully
-        var verify_bounds = function verify_bounds(bounds) {
+        var verify_bounds = function(bounds) {
             // quickly add a simple getter method so you can use either
             // bounds.x or bounds.attr('x') as your notation,
             // the latter being a common convention among D3
             // developers
-            if (!bounds.attr) {
-                bounds.attr = function (property) {
-                    if (this[property]) {
+            if(!bounds.attr) {
+                bounds.attr = function(property) {
+                    if(this[property]) {
                         return this[property];
                     }
-                };
+                }
             }
             // if it's an associative array, make sure it has all the
             // necessary properties represented directly
-            if (typeof bounds == 'object' && typeof bounds.x !== 'undefined' && typeof bounds.y !== 'undefined' && typeof bounds.width !== 'undefined' && typeof bounds.height !== 'undefined'
+            if(
+                (typeof bounds == 'object') &&
+                (typeof bounds.x !== 'undefined') &&
+                (typeof bounds.y !== 'undefined') &&
+                (typeof bounds.width !== 'undefined') &&
+                (typeof bounds.height !== 'undefined')
             // if that's the case, then the bounds are fine
             ) {
-                    // return the lightly modified bounds
-                    return bounds;
-                    // if it's a numerically indexed array, assume it's a
-                    // d3-selected rect and try to extract the positions
-                } else if (
+                // return the lightly modified bounds
+                return bounds;
+                // if it's a numerically indexed array, assume it's a
+                // d3-selected rect and try to extract the positions
+            } else if (
                 // first try to make sure it's an array using Array.isArray
-                typeof Array.isArray == 'function' && Array.isArray(bounds) ||
+            (
+            (typeof Array.isArray == 'function') &&
+            (Array.isArray(bounds))
+            ) ||
                 // but since Array.isArray isn't always supported, fall
                 // back to casting to the object to string when it's not
-                Object.prototype.toString.call(bounds) === '[object Array]') {
-                    // once you're sure it's an array, extract the boundaries
-                    // from the rect
-                    var extracted_bounds = extract_bounds(bounds);
-                    return extracted_bounds;
-                } else {
-                    // but if the bounds are neither an object nor a numerical
-                    // array, then the bounds argument is invalid and you'll
-                    // need to fix it
-                    return false;
-                }
-        };
+            (Object.prototype.toString.call(bounds) === '[object Array]')
+            ) {
+                // once you're sure it's an array, extract the boundaries
+                // from the rect
+                var extracted_bounds = extract_bounds(bounds);
+                return extracted_bounds;
+            } else {
+                // but if the bounds are neither an object nor a numerical
+                // array, then the bounds argument is invalid and you'll
+                // need to fix it
+                return false;
+            }
+        }
 
-        var apply_padding = function apply_padding(bounds, padding) {
+        var apply_padding = function(bounds, padding) {
             var padded_bounds = bounds;
-            if (padding !== 0) {
+            if(padding !== 0) {
                 padded_bounds.x = parseInt(padded_bounds.x) + padding;
                 padded_bounds.y = parseInt(padded_bounds.y) + padding;
                 padded_bounds.width -= padding * 2;
                 padded_bounds.height -= padding * 2;
             }
             return padded_bounds;
-        };
+        }
 
         // verify bounds
         var verified_bounds = verify_bounds(bounds);
 
         // modify bounds if a padding value is provided
-        if (padding) {
+        if(padding) {
             verified_bounds = apply_padding(verified_bounds, padding);
         }
 
         // check that we have the necessary conditions for this function to operate properly
-        if (
-        // selection it's operating on cannot be not empty
-        selection.length == 0 ||
-        // d3 must be available
-        !d3 ||
-        // desired wrapping bounds must be provided as an input argument
-        !bounds ||
-        // input bounds must validate
-        !verified_bounds) {
+        if(
+            // selection it's operating on cannot be not empty
+        (selection.length == 0) ||
+            // d3 must be available
+        (!d3) ||
+            // desired wrapping bounds must be provided as an input argument
+        (!bounds) ||
+            // input bounds must validate
+        (!verified_bounds)
+        ) {
             // try to return the calling selection if possible
             // so as not to interfere with methods downstream in the
             // chain
-            if (selection) {
+            if(selection) {
                 return selection;
                 // if all else fails, just return false. if you hit this point then you're
                 // almost certainly trying to call the textwrap() method on something that
                 // doesn't make sense!
             } else {
-                    return false;
-                }
+                return false;
+            }
             // if we've validated everything then we can finally proceed
             // to the meat of this operation
         } else {
 
-                // reassign the verified bounds as the set we want
-                // to work with from here on; this ensures that we're
-                // using the same data structure for our bounds regardless
-                // of whether the input argument was a simple object or
-                // a d3 selection
-                bounds = verified_bounds;
+            // reassign the verified bounds as the set we want
+            // to work with from here on; this ensures that we're
+            // using the same data structure for our bounds regardless
+            // of whether the input argument was a simple object or
+            // a d3 selection
+            bounds = verified_bounds;
 
-                // wrap using html and foreignObjects if they are supported
-                var wrap_with_foreignobjects = function wrap_with_foreignobjects(item) {
-                    // establish variables to quickly reference target nodes later
-                    var parent = d3.select(item[0].parentNode);
-                    var text_node = parent.select('text');
-                    var styled_line_height = text_node.style('line-height');
-                    // extract our desired content from the single text element
-                    var text_to_wrap = text_node.text();
-                    // remove the text node and replace with a foreign object
-                    text_node.remove();
-                    var foreign_object = parent.append('foreignObject');
-                    // add foreign object and set dimensions, position, etc
-                    foreign_object.attr('requiredFeatures', 'http://www.w3.org/TR/SVG11/feature#Extensibility').attr('x', bounds.x).attr('y', bounds.y).attr('width', bounds.width).attr('height', bounds.height);
-                    // insert an HTML div
-                    var wrap_div = foreign_object.append('xhtml:div')
+            // wrap using html and foreignObjects if they are supported
+            var wrap_with_foreignobjects = function(item) {
+                // establish variables to quickly reference target nodes later
+                var parent = d3.select(item[0].parentNode);
+                var text_node = parent.select('text');
+                var styled_line_height = text_node.style('line-height');
+                // extract our desired content from the single text element
+                var text_to_wrap = text_node.text();
+                // remove the text node and replace with a foreign object
+                text_node.remove();
+                var foreign_object = parent.append('foreignObject');
+                // add foreign object and set dimensions, position, etc
+                foreign_object
+                    .attr('requiredFeatures', 'http://www.w3.org/TR/SVG11/feature#Extensibility')
+                    .attr('x', bounds.x)
+                    .attr('y', bounds.y)
+                    .attr('width', bounds.width)
+                    .attr('height', bounds.height);
+                // insert an HTML div
+                var wrap_div = foreign_object
+                    .append('xhtml:div')
                     // this class is currently hardcoded
                     // probably not necessary but easy to
                     // override using .classed() and for now
                     // it's nice to avoid a litany of input
                     // arguments
                     .attr('class', 'wrapped');
-                    // set div to same dimensions as foreign object
-                    wrap_div.style('height', bounds.height).style('width', bounds.width)
+                // set div to same dimensions as foreign object
+                wrap_div
+                    .style('height', bounds.height)
+                    .style('width', bounds.width)
                     // insert text content
                     .html(text_to_wrap);
-                    if (styled_line_height) {
-                        wrap_div.style('line-height', styled_line_height);
-                    }
-                    return_value = parent.select('foreignObject');
-                };
+                if(styled_line_height) {
+                    wrap_div.style('line-height', styled_line_height);
+                }
+                return_value = parent.select('foreignObject');
+            }
 
-                // wrap with tspans if foreignObject is undefined
-                var wrap_with_tspans = function wrap_with_tspans(item) {
-                    // operate on the first text item in the selection
-                    var text_node = item[0];
-                    var parent = text_node.parentNode;
-                    var text_node_selected = d3.select(text_node);
-                    // measure initial size of the text node as rendered
-                    var text_node_height = text_node.getBBox().height;
-                    var text_node_width = text_node.getBBox().width;
-                    // figure out the line height, either from rendered height
-                    // of the font or attached styling
-                    var line_height;
-                    var rendered_line_height = text_node_height;
-                    var styled_line_height = text_node_selected.style('line-height');
-                    if (styled_line_height && parseInt(styled_line_height)) {
-                        line_height = parseInt(styled_line_height.replace('px', ''));
-                    } else {
-                        line_height = rendered_line_height;
-                    }
-                    // only fire the rest of this if the text content
-                    // overflows the desired dimensions
-                    if (text_node_width > bounds.width) {
-                        // store whatever is inside the text node
-                        // in a variable and then zero out the
-                        // initial content; we'll reinsert in a moment
-                        // using tspan elements.
-                        var text_to_wrap = text_node_selected.text();
-                        text_node_selected.text('');
-                        if (text_to_wrap) {
-                            // keep track of whether we are splitting by spaces
-                            // so we know whether to reinsert those spaces later
-                            var break_delimiter;
-                            // split at spaces to create an array of individual words
-                            var text_to_wrap_array;
-                            if (text_to_wrap.indexOf(' ') !== -1) {
-                                var break_delimiter = ' ';
-                                text_to_wrap_array = text_to_wrap.split(' ');
+
+            // wrap with tspans if foreignObject is undefined
+            var wrap_with_tspans = function(item) {
+                // operate on the first text item in the selection
+                var text_node = item[0];
+                var parent = text_node.parentNode;
+                var text_node_selected = d3.select(text_node);
+                // measure initial size of the text node as rendered
+                var text_node_height = text_node.getBBox().height;
+                var text_node_width = text_node.getBBox().width;
+                // figure out the line height, either from rendered height
+                // of the font or attached styling
+                var line_height;
+                var rendered_line_height = text_node_height;
+                var styled_line_height = text_node_selected.style('line-height');
+                if(
+                    (styled_line_height) &&
+                    (parseInt(styled_line_height))
+                ) {
+                    line_height = parseInt(styled_line_height.replace('px', ''));
+                } else {
+                    line_height = rendered_line_height;
+                }
+                // only fire the rest of this if the text content
+                // overflows the desired dimensions
+                if(text_node_width > bounds.width) {
+                    // store whatever is inside the text node
+                    // in a variable and then zero out the
+                    // initial content; we'll reinsert in a moment
+                    // using tspan elements.
+                    var text_to_wrap = text_node_selected.text();
+                    text_node_selected.text('');
+                    if(text_to_wrap) {
+                        // keep track of whether we are splitting by spaces
+                        // so we know whether to reinsert those spaces later
+                        var break_delimiter;
+                        // split at spaces to create an array of individual words
+                        var text_to_wrap_array;
+                        if(text_to_wrap.indexOf(' ') !== -1) {
+                            var break_delimiter = ' ';
+                            text_to_wrap_array = text_to_wrap.split(' ');
+                        } else {
+                            // if there are no spaces, figure out the split
+                            // points by comparing rendered text width against
+                            // bounds and translating that into character position
+                            // cuts
+                            break_delimiter = '';
+                            var string_length = text_to_wrap.length;
+                            var number_of_substrings = Math.ceil(text_node_width / bounds.width);
+                            var splice_interval = Math.floor(string_length / number_of_substrings);
+                            if(
+                                !(splice_interval * number_of_substrings >= string_length)
+                            ) {
+                                number_of_substrings++;
+                            }
+                            var text_to_wrap_array = [];
+                            var substring;
+                            var start_position;
+                            for(var i = 0; i < number_of_substrings; i++) {
+                                start_position = i * splice_interval;
+                                substring = text_to_wrap.substr(start_position, splice_interval);
+                                text_to_wrap_array.push(substring);
+                            }
+                        }
+
+                        // new array where we'll store the words re-assembled into
+                        // substrings that have been tested against the desired
+                        // maximum wrapping width
+                        var substrings = [];
+                        // computed text length is arguably incorrectly reported for
+                        // all tspans after the first one, in that they will include
+                        // the width of previous separate tspans. to compensate we need
+                        // to manually track the computed text length of all those
+                        // previous tspans and substrings, and then use that to offset
+                        // the miscalculation. this then gives us the actual correct
+                        // position we want to use in rendering the text in the SVG.
+                        var total_offset = 0;
+                        // object for storing the results of text length computations later
+                        var temp = {};
+                        // loop through the words and test the computed text length
+                        // of the string against the maximum desired wrapping width
+                        for(var i = 0; i < text_to_wrap_array.length; i++) {
+                            var word = text_to_wrap_array[i];
+                            var previous_string = text_node_selected.text();
+                            var previous_width = text_node.getComputedTextLength();
+                            // initialize the current word as the first word
+                            // or append to the previous string if one exists
+                            var new_string;
+                            if(previous_string) {
+                                new_string = previous_string + break_delimiter + word;
                             } else {
-                                // if there are no spaces, figure out the split
-                                // points by comparing rendered text width against
-                                // bounds and translating that into character position
-                                // cuts
-                                break_delimiter = '';
-                                var string_length = text_to_wrap.length;
-                                var number_of_substrings = Math.ceil(text_node_width / bounds.width);
-                                var splice_interval = Math.floor(string_length / number_of_substrings);
-                                if (!(splice_interval * number_of_substrings >= string_length)) {
-                                    number_of_substrings++;
-                                }
-                                var text_to_wrap_array = [];
-                                var substring;
-                                var start_position;
-                                for (var i = 0; i < number_of_substrings; i++) {
-                                    start_position = i * splice_interval;
-                                    substring = text_to_wrap.substr(start_position, splice_interval);
-                                    text_to_wrap_array.push(substring);
-                                }
+                                new_string = word;
                             }
-
-                            // new array where we'll store the words re-assembled into
-                            // substrings that have been tested against the desired
-                            // maximum wrapping width
-                            var substrings = [];
-                            // computed text length is arguably incorrectly reported for
-                            // all tspans after the first one, in that they will include
-                            // the width of previous separate tspans. to compensate we need
-                            // to manually track the computed text length of all those
-                            // previous tspans and substrings, and then use that to offset
-                            // the miscalculation. this then gives us the actual correct
-                            // position we want to use in rendering the text in the SVG.
-                            var total_offset = 0;
-                            // object for storing the results of text length computations later
-                            var temp = {};
-                            // loop through the words and test the computed text length
-                            // of the string against the maximum desired wrapping width
-                            for (var i = 0; i < text_to_wrap_array.length; i++) {
-                                var word = text_to_wrap_array[i];
-                                var previous_string = text_node_selected.text();
-                                var previous_width = text_node.getComputedTextLength();
-                                // initialize the current word as the first word
-                                // or append to the previous string if one exists
-                                var new_string;
-                                if (previous_string) {
-                                    new_string = previous_string + break_delimiter + word;
-                                } else {
-                                    new_string = word;
-                                }
-                                // add the newest substring back to the text node and
-                                // measure the length
-                                text_node_selected.text(new_string);
-                                var new_width = text_node.getComputedTextLength();
-                                // adjust the length by the offset we've tracked
-                                // due to the misreported length discussed above
-                                var test_width = new_width - total_offset;
-                                // if our latest version of the string is too
-                                // big for the bounds, use the previous
-                                // version of the string (without the newest word
-                                // added) and use the latest word to restart the
-                                // process with a new tspan
-                                if (new_width > bounds.width) {
-                                    if (previous_string && previous_string !== '') {
-                                        total_offset = total_offset + previous_width;
-                                        temp = { string: previous_string, width: previous_width, offset: total_offset };
-                                        substrings.push(temp);
-                                        text_node_selected.text('');
-                                        text_node_selected.text(word);
-                                        // Handle case where there is just one more word to be wrapped
-                                        if (i == text_to_wrap_array.length - 1) {
-                                            new_string = word;
-                                            text_node_selected.text(new_string);
-                                            new_width = text_node.getComputedTextLength();
-                                        }
-                                    }
-                                }
-                                // if we're up to the last word in the array,
-                                // get the computed length as is without
-                                // appending anything further to it
-                                if (i == text_to_wrap_array.length - 1) {
+                            // add the newest substring back to the text node and
+                            // measure the length
+                            text_node_selected.text(new_string);
+                            var new_width = text_node.getComputedTextLength();
+                            // adjust the length by the offset we've tracked
+                            // due to the misreported length discussed above
+                            var test_width = new_width - total_offset;
+                            // if our latest version of the string is too
+                            // big for the bounds, use the previous
+                            // version of the string (without the newest word
+                            // added) and use the latest word to restart the
+                            // process with a new tspan
+                            if(new_width > bounds.width) {
+                                if(
+                                    (previous_string) &&
+                                    (previous_string !== '')
+                                ) {
+                                    total_offset = total_offset + previous_width;
+                                    temp = {string: previous_string, width: previous_width, offset: total_offset};
+                                    substrings.push(temp);
                                     text_node_selected.text('');
-                                    var final_string = new_string;
-                                    if (final_string && final_string !== '') {
-                                        if (new_width - total_offset > 0) {
-                                            new_width = new_width - total_offset;
-                                        }
-                                        temp = { string: final_string, width: new_width, offset: total_offset };
-                                        substrings.push(temp);
+                                    text_node_selected.text(word);
+                                    // Handle case where there is just one more word to be wrapped
+                                    if(i == text_to_wrap_array.length - 1) {
+                                        new_string = word;
+                                        text_node_selected.text(new_string);
+                                        new_width = text_node.getComputedTextLength();
                                     }
                                 }
                             }
-
-                            // append each substring as a tspan
-                            var current_tspan;
-                            var tspan_count;
-                            // double check that the text content has been removed
-                            // before we start appending tspans
-                            text_node_selected.text('');
-                            for (var i = 0; i < substrings.length; i++) {
-                                var substring = substrings[i].string;
-                                if (i > 0) {
-                                    var previous_substring = substrings[i - 1];
+                            // if we're up to the last word in the array,
+                            // get the computed length as is without
+                            // appending anything further to it
+                            if(i == text_to_wrap_array.length - 1) {
+                                text_node_selected.text('');
+                                var final_string = new_string;
+                                if(
+                                    (final_string) &&
+                                    (final_string !== '')
+                                ) {
+                                    if((new_width - total_offset) > 0) {new_width = new_width - total_offset}
+                                    temp = {string: final_string, width: new_width, offset: total_offset};
+                                    substrings.push(temp);
                                 }
-                                // only append if we're sure it won't make the tspans
-                                // overflow the bounds.
-                                if (i * line_height < bounds.height - line_height * 1.5) {
-                                    current_tspan = text_node_selected.append('tspan').text(substring);
-                                    // vertical shift to all tspans after the first one
-                                    current_tspan.attr('dy', function (d) {
-                                        if (i > 0) {
+                            }
+                        }
+
+                        // append each substring as a tspan
+                        var current_tspan;
+                        var tspan_count;
+                        // double check that the text content has been removed
+                        // before we start appending tspans
+                        text_node_selected.text('');
+                        for(var i = 0; i < substrings.length; i++) {
+                            var substring = substrings[i].string;
+                            if(i > 0) {
+                                var previous_substring = substrings[i - 1];
+                            }
+                            // only append if we're sure it won't make the tspans
+                            // overflow the bounds.
+                            if((i) * line_height < bounds.height - (line_height * 1.5)) {
+                                current_tspan = text_node_selected.append('tspan')
+                                    .text(substring);
+                                // vertical shift to all tspans after the first one
+                                current_tspan
+                                    .attr('dy', function(d) {
+                                        if(i > 0) {
                                             return line_height;
                                         }
                                     });
-                                    // shift left from default position, which
-                                    // is probably based on the full length of the
-                                    // text string until we make this adjustment
-                                    current_tspan.attr('x', function () {
+                                // shift left from default position, which
+                                // is probably based on the full length of the
+                                // text string until we make this adjustment
+                                current_tspan
+                                    .attr('x', function() {
                                         var x_offset = bounds.x;
-                                        if (padding) {
-                                            x_offset += padding;
-                                        }
+                                        if(padding) {x_offset += padding;}
                                         return x_offset;
                                     });
-                                    //                                    .attr('dx', function() {
-                                    //                                        if(i == 0) {
-                                    //                                            var render_offset = 0;
-                                    //                                        } else if(i > 0) {
-                                    //                                            render_offset = substrings[i - 1].width;
-                                    //                                            render_offset = render_offset * -1;
-                                    //                                        }
-                                    //                                        return render_offset;
-                                    //                                    });
-                                }
+//                                    .attr('dx', function() {
+//                                        if(i == 0) {
+//                                            var render_offset = 0;
+//                                        } else if(i > 0) {
+//                                            render_offset = substrings[i - 1].width;
+//                                            render_offset = render_offset * -1;
+//                                        }
+//                                        return render_offset;
+//                                    });
                             }
                         }
                     }
-                    // position the overall text node, whether wrapped or not
-                    text_node_selected.attr('y', function () {
-                        var y_offset = bounds.y;
-                        // shift by line-height to move the baseline into
-                        // the bounds – otherwise the text baseline would be
-                        // at the top of the bounds
-                        if (line_height) {
-                            y_offset += line_height;
-                        }
-                        // shift by padding, if it's there
-                        if (padding) {
-                            y_offset += padding;
-                        }
-                        return y_offset;
-                    });
-                    // shift to the right by the padding value
-                    text_node_selected.attr('x', function () {
-                        var x_offset = bounds.x;
-                        if (padding) {
-                            x_offset += padding;
-                        }
-                        return x_offset;
-                    });
-
-                    // assign our modified text node with tspans
-                    // to the return value
-                    return_value = d3.select(parent).selectAll('text');
-                };
-
-                // variable used to hold the functions that let us
-                // switch between the wrap methods
-                var wrap_method;
-
-                // if a wrap method if being forced, assign that
-                // function
-                if (force_wrap_method) {
-                    if (force_wrap_method == 'foreignobjects') {
-                        wrap_method = wrap_with_foreignobjects;
-                    } else if (force_wrap_method == 'tspans') {
-                        wrap_method = wrap_with_tspans;
-                    }
                 }
+                // position the overall text node, whether wrapped or not
+                text_node_selected.attr('y', function() {
+                    var y_offset = bounds.y;
+                    // shift by line-height to move the baseline into
+                    // the bounds – otherwise the text baseline would be
+                    // at the top of the bounds
+                    if(line_height) {y_offset += line_height;}
+                    // shift by padding, if it's there
+                    if(padding) {y_offset += padding;}
+                    return y_offset;
+                });
+                // shift to the right by the padding value
+                text_node_selected.attr('x', function() {
+                    var x_offset = bounds.x;
+                    if(padding) {x_offset += padding;}
+                    return x_offset;
+                });
 
-                // if no wrap method is being forced, then instead
-                // test for browser support of foreignobject and
-                // use whichever wrap method makes sense accordingly
-                if (!force_wrap_method) {
-                    if (typeof SVGForeignObjectElement !== 'undefined') {
-                        wrap_method = wrap_with_foreignobjects;
-                    } else {
-                        wrap_method = wrap_with_tspans;
-                    }
-                }
 
-                // run the desired wrap function for each item
-                // in the d3 selection that called .textwrap()
-                for (var i = 0; i < selection.length; i++) {
-                    var item = selection[i];
-                    wrap_method(item);
-                }
-
-                // return the modified nodes so we can chain other
-                // methods to them.
-                return return_value;
+                // assign our modified text node with tspans
+                // to the return value
+                return_value = d3.select(parent).selectAll('text');
             }
-    };
+
+            // variable used to hold the functions that let us
+            // switch between the wrap methods
+            var wrap_method;
+
+            // if a wrap method if being forced, assign that
+            // function
+            if(force_wrap_method) {
+                if(force_wrap_method == 'foreignobjects') {
+                    wrap_method = wrap_with_foreignobjects;
+                } else if (force_wrap_method == 'tspans') {
+                    wrap_method = wrap_with_tspans;
+                }
+            }
+
+            // if no wrap method is being forced, then instead
+            // test for browser support of foreignobject and
+            // use whichever wrap method makes sense accordingly
+            if(!force_wrap_method) {
+                if(typeof SVGForeignObjectElement !== 'undefined') {
+                    wrap_method = wrap_with_foreignobjects;
+                } else {
+                    wrap_method = wrap_with_tspans;
+                }
+            }
+
+            // run the desired wrap function for each item
+            // in the d3 selection that called .textwrap()
+            for(var i = 0; i < selection.length; i++) {
+                var item = selection[i];
+                wrap_method(item);
+            }
+
+            // return the modified nodes so we can chain other
+            // methods to them.
+            return return_value;
+
+        }
+
+    }
+
 })();
 /* jshint ignore:end */
-
-},{"d3":4}],108:[function(require,module,exports){
-'use strict';
+},{"d3":1}],108:[function(require,module,exports){
 
 var Logger = require('../../logger');
 var log = new Logger.Log();
@@ -31288,7 +31699,8 @@ var relations = [];
 
 var classes;
 var idCache;
-classes = {};
+classes = {
+};
 
 // Functions to be run after graph rendering
 var funs = [];
@@ -31300,11 +31712,11 @@ var funs = [];
  * @param style
  */
 exports.addClass = function (id) {
-    if (typeof classes[id] === 'undefined') {
+    if(typeof classes[id] === 'undefined'){
         classes[id] = {
-            id: id,
-            methods: [],
-            members: []
+            id:id,
+            methods:[],
+            members:[]
         };
     }
 };
@@ -31335,10 +31747,11 @@ exports.addRelation = function (relation) {
 
 exports.addMembers = function (className, MembersArr) {
     var theClass = classes[className];
-    if (typeof MembersArr === 'string') {
-        if (MembersArr.substr(-1) === ')') {
+    if(typeof MembersArr === 'string'){
+        if(MembersArr.substr(-1) === ')'){
             theClass.methods.push(MembersArr);
-        } else {
+        }
+        else{
             theClass.members.push(MembersArr);
         }
     }
@@ -31346,31 +31759,30 @@ exports.addMembers = function (className, MembersArr) {
 
 exports.cleanupLabel = function (label) {
 
-    if (label.substring(0, 1) === ':') {
+    if(label.substring(0,1) === ':'){
         return label.substr(2).trim();
-    } else {
+    }
+    else{
         return label.trim();
     }
 };
 
 exports.lineType = {
-    LINE: 0,
-    DOTTED_LINE: 1
+    LINE:0,
+    DOTTED_LINE:1
 };
 
 exports.relationType = {
-    AGGREGATION: 0,
-    EXTENSION: 1,
-    COMPOSITION: 2,
-    DEPENDENCY: 3
+    AGGREGATION:0,
+    EXTENSION:1,
+    COMPOSITION:2,
+    DEPENDENCY:3
 };
 
-},{"../../logger":126}],109:[function(require,module,exports){
+},{"../../logger":127}],109:[function(require,module,exports){
 /**
  * Created by knut on 14-11-23.
  */
-
-'use strict';
 
 var cd = require('./parser/classDiagram').parser;
 var cDDb = require('./classDb');
@@ -31391,43 +31803,112 @@ var conf = {
 };
 
 // Todo optimize
-var getGraphId = function getGraphId(label) {
+var getGraphId = function (label) {
     var keys = Object.keys(idCache);
 
     var i;
-    for (i = 0; i < keys.length; i++) {
-        if (idCache[keys[i]].label === label) {
-            return keys[i];
-        }
+    for(i=0;i<keys.length;i++){
+      if(idCache[keys[i]].label === label){
+          return keys[i];
+      }
     }
 
     return undefined;
-};
+}
 
 /**
  * Setup arrow head and define the marker. The result is appended to the svg.
  */
-var insertMarkers = function insertMarkers(elem) {
-    elem.append('defs').append('marker').attr('id', 'extensionStart').attr('class', 'extension').attr('refX', 0).attr('refY', 7).attr('markerWidth', 190).attr('markerHeight', 240).attr('orient', 'auto').append('path').attr('d', 'M 1,7 L18,13 V 1 Z');
+var insertMarkers = function (elem) {
+    elem.append('defs').append('marker')
+        .attr('id', 'extensionStart')
+        .attr('class', 'extension')
+        .attr('refX', 0)
+        .attr('refY', 7)
+        .attr('markerWidth', 190)
+        .attr('markerHeight', 240)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 1,7 L18,13 V 1 Z');
 
-    elem.append('defs').append('marker').attr('id', 'extensionEnd').attr('refX', 19).attr('refY', 7).attr('markerWidth', 20).attr('markerHeight', 28).attr('orient', 'auto').append('path').attr('d', 'M 1,1 V 13 L18,7 Z'); //this is actual shape for arrowhead
+    elem.append('defs').append('marker')
+        .attr('id', 'extensionEnd')
+        .attr('refX', 19)
+        .attr('refY', 7)
+        .attr('markerWidth', 20)
+        .attr('markerHeight', 28)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 1,1 V 13 L18,7 Z'); //this is actual shape for arrowhead
 
-    elem.append('defs').append('marker').attr('id', 'compositionStart').attr('class', 'extension').attr('refX', 0).attr('refY', 7).attr('markerWidth', 190).attr('markerHeight', 240).attr('orient', 'auto').append('path').attr('d', 'M 18,7 L9,13 L1,7 L9,1 Z');
+    elem.append('defs').append('marker')
+        .attr('id', 'compositionStart')
+        .attr('class', 'extension')
+        .attr('refX', 0)
+        .attr('refY', 7)
+        .attr('markerWidth', 190)
+        .attr('markerHeight', 240)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 18,7 L9,13 L1,7 L9,1 Z');
 
-    elem.append('defs').append('marker').attr('id', 'compositionEnd').attr('refX', 19).attr('refY', 7).attr('markerWidth', 20).attr('markerHeight', 28).attr('orient', 'auto').append('path').attr('d', 'M 18,7 L9,13 L1,7 L9,1 Z');
+    elem.append('defs').append('marker')
+        .attr('id', 'compositionEnd')
+        .attr('refX', 19)
+        .attr('refY', 7)
+        .attr('markerWidth', 20)
+        .attr('markerHeight', 28)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 18,7 L9,13 L1,7 L9,1 Z');
 
-    elem.append('defs').append('marker').attr('id', 'aggregationStart').attr('class', 'extension').attr('refX', 0).attr('refY', 7).attr('markerWidth', 190).attr('markerHeight', 240).attr('orient', 'auto').append('path').attr('d', 'M 18,7 L9,13 L1,7 L9,1 Z');
 
-    elem.append('defs').append('marker').attr('id', 'aggregationEnd').attr('refX', 19).attr('refY', 7).attr('markerWidth', 20).attr('markerHeight', 28).attr('orient', 'auto').append('path').attr('d', 'M 18,7 L9,13 L1,7 L9,1 Z');
+    elem.append('defs').append('marker')
+        .attr('id', 'aggregationStart')
+        .attr('class', 'extension')
+        .attr('refX', 0)
+        .attr('refY', 7)
+        .attr('markerWidth', 190)
+        .attr('markerHeight', 240)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 18,7 L9,13 L1,7 L9,1 Z');
 
-    elem.append('defs').append('marker').attr('id', 'dependencyStart').attr('class', 'extension').attr('refX', 0).attr('refY', 7).attr('markerWidth', 190).attr('markerHeight', 240).attr('orient', 'auto').append('path').attr('d', 'M 5,7 L9,13 L1,7 L9,1 Z');
+    elem.append('defs').append('marker')
+        .attr('id', 'aggregationEnd')
+        .attr('refX', 19)
+        .attr('refY', 7)
+        .attr('markerWidth', 20)
+        .attr('markerHeight', 28)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 18,7 L9,13 L1,7 L9,1 Z');
 
-    elem.append('defs').append('marker').attr('id', 'dependencyEnd').attr('refX', 19).attr('refY', 7).attr('markerWidth', 20).attr('markerHeight', 28).attr('orient', 'auto').append('path').attr('d', 'M 18,7 L9,13 L14,7 L9,1 Z');
+    elem.append('defs').append('marker')
+        .attr('id', 'dependencyStart')
+        .attr('class', 'extension')
+        .attr('refX', 0)
+        .attr('refY', 7)
+        .attr('markerWidth', 190)
+        .attr('markerHeight', 240)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 5,7 L9,13 L1,7 L9,1 Z');
+
+    elem.append('defs').append('marker')
+        .attr('id', 'dependencyEnd')
+        .attr('refX', 19)
+        .attr('refY', 7)
+        .attr('markerWidth', 20)
+        .attr('markerHeight', 28)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 18,7 L9,13 L14,7 L9,1 Z');
 };
 
 var edgeCount = 0;
-var drawEdge = function drawEdge(elem, path, relation) {
-    var getRelationType = function getRelationType(type) {
+var drawEdge = function (elem, path, relation) {
+    var getRelationType = function (type) {
         switch (type) {
             case cDDb.relationType.AGGREGATION:
                 return 'aggregation';
@@ -31440,24 +31921,30 @@ var drawEdge = function drawEdge(elem, path, relation) {
         }
     };
 
+
     //The data for our line
     var lineData = path.points;
 
     //This is the accessor function we talked about above
-    var lineFunction = d3.svg.line().x(function (d) {
-        return d.x;
-    }).y(function (d) {
-        return d.y;
-    })
-    //.interpolate('cardinal');
-    .interpolate('basis');
+    var lineFunction = d3.svg.line()
+        .x(function (d) {
+            return d.x;
+        })
+        .y(function (d) {
+            return d.y;
+        })
+        //.interpolate('cardinal');
+        .interpolate('basis');
 
-    var svgPath = elem.append('path').attr('d', lineFunction(lineData)).attr('id', 'edge' + edgeCount).attr('class', 'relation');
-    var url = '';
-    if (conf.arrowMarkerAbsolute) {
-        url = window.location.protocol + '//' + window.location.host + window.location.pathname + window.location.search;
-        url = url.replace(/\(/g, '\\(');
-        url = url.replace(/\)/g, '\\)');
+    var svgPath = elem.append('path')
+        .attr('d', lineFunction(lineData))
+        .attr('id', 'edge' + edgeCount)
+        .attr('class', 'relation');
+    var url =  '';
+    if(conf.arrowMarkerAbsolute){
+        url =  window.location.protocol+'//'+window.location.host+window.location.pathname +window.location.search;
+        url = url.replace(/\(/g,'\\(');
+        url = url.replace(/\)/g,'\\)');
     }
 
     //console.log(relation.relation.type1);
@@ -31473,39 +31960,55 @@ var drawEdge = function drawEdge(elem, path, relation) {
     //var y = Math.floor(bbox.y + bbox.height/2.0);
     var x, y;
     var l = path.points.length;
-    if (l % 2 !== 0) {
+    if ((l % 2) !== 0) {
         var p1 = path.points[Math.floor(l / 2)];
         var p2 = path.points[Math.ceil(l / 2)];
         x = (p1.x + p2.x) / 2;
         y = (p1.y + p2.y) / 2;
-    } else {
+    }
+    else {
         var p = path.points[Math.floor(l / 2)];
         x = p.x;
         y = p.y;
     }
 
     if (typeof relation.title !== 'undefined') {
-        var g = elem.append('g').attr('class', 'classLabel');
-        var label = g.append('text').attr('class', 'label').attr('x', x).attr('y', y).attr('fill', 'red').attr('text-anchor', 'middle').text(relation.title);
+        var g = elem.append('g').
+            attr('class','classLabel');
+        var label = g.append('text')
+            .attr('class', 'label')
+            .attr('x', x)
+            .attr('y', y)
+            .attr('fill', 'red')
+            .attr('text-anchor', 'middle')
+            .text(relation.title);
 
         window.label = label;
         var bounds = label.node().getBBox();
 
-        g.insert('rect', ':first-child').attr('class', 'box').attr('x', bounds.x - conf.padding / 2).attr('y', bounds.y - conf.padding / 2).attr('width', bounds.width + 2 * conf.padding / 2).attr('height', bounds.height + 2 * conf.padding / 2);
+        g.insert('rect', ':first-child')
+            .attr('class', 'box')
+            .attr('x', bounds.x-conf.padding/2)
+            .attr('y', bounds.y-conf.padding/2)
+            .attr('width', bounds.width + 2 * conf.padding/2)
+            .attr('height', bounds.height + 2 * conf.padding/2);
         //.append('textpath')
         //.attr('xlink:href','#edge'+edgeCount)
         //.attr('text-anchor','middle')
         //.attr('startOffset','50%')
+
     }
 
     edgeCount++;
-};
+}
 
-var drawClass = function drawClass(elem, classDef) {
+var drawClass = function (elem, classDef) {
     log.info('Rendering class ' + classDef);
 
-    var addTspan = function addTspan(textEl, txt, isFirst) {
-        var tSpan = textEl.append('tspan').attr('x', conf.padding).text(txt);
+    var addTspan = function (textEl, txt, isFirst) {
+        var tSpan = textEl.append('tspan')
+            .attr('x', conf.padding)
+            .text(txt);
         if (!isFirst) {
             tSpan.attr('dy', conf.textHeight);
         }
@@ -31519,22 +32022,32 @@ var drawClass = function drawClass(elem, classDef) {
         height: 0
     };
 
-    var g = elem.append('g').attr('id', id).attr('class', 'classGroup');
-    var title = g.append('text').attr('x', conf.padding).attr('y', conf.textHeight + conf.padding).text(classDef.id);
+    var g = elem.append('g')
+        .attr('id', id)
+        .attr('class', 'classGroup');
+    var title = g.append('text')
+        .attr('x', conf.padding)
+        .attr('y', conf.textHeight + conf.padding)
+        .text(classDef.id);
 
     var titleHeight = title.node().getBBox().height;
 
-    var membersLine = g.append('line') // text label for the x axis
-    .attr('x1', 0).attr('y1', conf.padding + titleHeight + conf.dividerMargin / 2).attr('y2', conf.padding + titleHeight + conf.dividerMargin / 2);
+    var membersLine = g.append('line')      // text label for the x axis
+        .attr('x1', 0)
+        .attr('y1', conf.padding + titleHeight + conf.dividerMargin / 2)
+        .attr('y2', conf.padding + titleHeight + conf.dividerMargin / 2);
 
-    var members = g.append('text') // text label for the x axis
-    .attr('x', conf.padding).attr('y', titleHeight + conf.dividerMargin + conf.textHeight).attr('fill', 'white').attr('class', 'classText');
+    var members = g.append('text')      // text label for the x axis
+        .attr('x', conf.padding)
+        .attr('y', titleHeight + (conf.dividerMargin) + conf.textHeight)
+        .attr('fill', 'white')
+        .attr('class', 'classText');
 
     var isFirst = true;
 
-    classDef.members.forEach(function (member) {
-        addTspan(members, member, isFirst);
-        isFirst = false;
+    classDef.members.forEach(function(member){
+            addTspan(members, member, isFirst);
+            isFirst = false;
     });
     //for (var member of classDef.members) {
     //    addTspan(members, member, isFirst);
@@ -31543,17 +32056,23 @@ var drawClass = function drawClass(elem, classDef) {
 
     var membersBox = members.node().getBBox();
 
-    var methodsLine = g.append('line') // text label for the x axis
-    .attr('x1', 0).attr('y1', conf.padding + titleHeight + 3 * conf.dividerMargin / 2 + membersBox.height).attr('y2', conf.padding + titleHeight + 3 * conf.dividerMargin / 2 + membersBox.height);
+    var methodsLine = g.append('line')      // text label for the x axis
+        .attr('x1', 0)
+        .attr('y1', conf.padding + titleHeight + 3 * conf.dividerMargin / 2 + membersBox.height)
+        .attr('y2', conf.padding + titleHeight + 3 * conf.dividerMargin / 2 + membersBox.height);
 
-    var methods = g.append('text') // text label for the x axis
-    .attr('x', conf.padding).attr('y', titleHeight + 2 * conf.dividerMargin + membersBox.height + conf.textHeight).attr('fill', 'white').attr('class', 'classText');
+
+    var methods = g.append('text')      // text label for the x axis
+        .attr('x', conf.padding)
+        .attr('y', titleHeight + 2 * conf.dividerMargin + membersBox.height + conf.textHeight)
+        .attr('fill', 'white')
+        .attr('class', 'classText');
 
     isFirst = true;
 
-    classDef.methods.forEach(function (method) {
-        addTspan(methods, method, isFirst);
-        isFirst = false;
+    classDef.methods.forEach(function(method){
+            addTspan(methods, method, isFirst);
+            isFirst = false;
     });
     //for (var method of classDef.methods) {
     //    addTspan(methods, method, isFirst);
@@ -31561,10 +32080,16 @@ var drawClass = function drawClass(elem, classDef) {
     //}
 
     var classBox = g.node().getBBox();
-    g.insert('rect', ':first-child').attr('x', 0).attr('y', 0).attr('width', classBox.width + 2 * conf.padding).attr('height', classBox.height + conf.padding + 0.5 * conf.dividerMargin);
+    g.insert('rect', ':first-child')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', classBox.width + 2 * conf.padding)
+        .attr('height', classBox.height + conf.padding + 0.5 * conf.dividerMargin);
+
 
     membersLine.attr('x2', classBox.width + 2 * conf.padding);
     methodsLine.attr('x2', classBox.width + 2 * conf.padding);
+
 
     classInfo.width = classBox.width + 2 * conf.padding;
     classInfo.height = classBox.height + conf.padding + 0.5 * conf.dividerMargin;
@@ -31573,6 +32098,7 @@ var drawClass = function drawClass(elem, classDef) {
     classCnt++;
     return classInfo;
 };
+
 
 module.exports.setConf = function (cnf) {
     var keys = Object.keys(cnf);
@@ -31591,6 +32117,7 @@ module.exports.draw = function (text, id) {
     cd.parse(text);
 
     log.info('Rendering diagram ' + text);
+
 
     //// Fetch the default direction, use TD if none was found
     var diagram = d3.select('#' + id);
@@ -31615,7 +32142,7 @@ module.exports.draw = function (text, id) {
     var classes = cDDb.getClasses();
     var keys = Object.keys(classes);
     var i;
-    for (i = 0; i < keys.length; i++) {
+    for (i=0;i<keys.length;i++) {
         var classDef = classes[keys[i]];
         var node = drawClass(diagram, classDef);
         // Add nodes to the graph. The first argument is the node id. The second is
@@ -31632,10 +32159,10 @@ module.exports.draw = function (text, id) {
 
     var relations = cDDb.getRelations();
     var i = 0;
-    relations.forEach(function (relation) {
-        i = i + 1;
-        log.info('tjoho' + getGraphId(relation.id1) + getGraphId(relation.id2) + JSON.stringify(relation));
-        g.setEdge(getGraphId(relation.id1), getGraphId(relation.id2), { relation: relation });
+    relations.forEach(function(relation){
+            i = i + 1;
+            log.info('tjoho' + getGraphId(relation.id1) +  getGraphId(relation.id2) + JSON.stringify(relation));
+            g.setEdge(getGraphId(relation.id1), getGraphId(relation.id2), {relation: relation});
     });
     //for (var relation of relations) {
     //    i = i + 1;
@@ -31644,9 +32171,9 @@ module.exports.draw = function (text, id) {
     //}
     dagre.layout(g);
     g.nodes().forEach(function (v) {
-        if (typeof v !== 'undefined') {
+        if(typeof v !== 'undefined'){
             log.debug('Node ' + v + ': ' + JSON.stringify(g.node(v)));
-            d3.select('#' + v).attr('transform', 'translate(' + (g.node(v).x - g.node(v).width / 2) + ',' + (g.node(v).y - g.node(v).height / 2) + ' )');
+            d3.select('#' + v).attr('transform', 'translate(' + (g.node(v).x - (g.node(v).width / 2)) + ',' + (g.node(v).y - (g.node(v).height / 2)) + ' )');
             //d3.select('#' +v +' rect').attr('x',(g.node(v).x-(g.node(v).width/2)))
             //.attr('y',(g.node(v).y-(g.node(v).height/2)));
         }
@@ -31655,6 +32182,7 @@ module.exports.draw = function (text, id) {
         log.debug('Edge ' + e.v + ' -> ' + e.w + ': ' + JSON.stringify(g.edge(e)));
         drawEdge(diagram, g.edge(e), g.edge(e).relation);
     });
+
 
     //
     diagram.attr('height', '100%');
@@ -31674,9 +32202,9 @@ module.exports.draw = function (text, id) {
     //diagram.attr('viewBox', (box.startx-conf.diagramMarginX) + ' -' +conf.diagramMarginY + ' ' + width + ' ' + height);
 };
 
-},{"../../d3":107,"../../logger":126,"./classDb":108,"./parser/classDiagram":110,"dagre":54}],110:[function(require,module,exports){
+},{"../../d3":107,"../../logger":127,"./classDb":108,"./parser/classDiagram":110,"dagre":51}],110:[function(require,module,exports){
 (function (process){
-/* parser generated by jison 0.4.15 */
+/* parser generated by jison 0.4.16 */
 /*
   Returns a Parser object of the following structure:
 
@@ -31749,774 +32277,711 @@ module.exports.draw = function (text, id) {
     recoverable: (boolean: TRUE when the parser has a error recovery rule available for this particular error)
   }
 */
-"use strict";
+var parser = (function(){
+var o=function(k,v,o,l){for(o=o||{},l=k.length;l--;o[k[l]]=v);return o},$V0=[1,11],$V1=[1,12],$V2=[1,13],$V3=[1,15],$V4=[1,16],$V5=[1,17],$V6=[6,8],$V7=[1,26],$V8=[1,27],$V9=[1,28],$Va=[1,29],$Vb=[1,30],$Vc=[1,31],$Vd=[6,8,13,17,23,26,27,28,29,30,31],$Ve=[6,8,13,17,23,26,27,28,29,30,31,45,46,47],$Vf=[23,45,46,47],$Vg=[23,30,31,45,46,47],$Vh=[23,26,27,28,29,45,46,47],$Vi=[6,8,13],$Vj=[1,46];
+var parser = {trace: function trace() { },
+yy: {},
+symbols_: {"error":2,"mermaidDoc":3,"graphConfig":4,"CLASS_DIAGRAM":5,"NEWLINE":6,"statements":7,"EOF":8,"statement":9,"className":10,"alphaNumToken":11,"relationStatement":12,"LABEL":13,"classStatement":14,"methodStatement":15,"CLASS":16,"STRUCT_START":17,"members":18,"STRUCT_STOP":19,"MEMBER":20,"SEPARATOR":21,"relation":22,"STR":23,"relationType":24,"lineType":25,"AGGREGATION":26,"EXTENSION":27,"COMPOSITION":28,"DEPENDENCY":29,"LINE":30,"DOTTED_LINE":31,"commentToken":32,"textToken":33,"graphCodeTokens":34,"textNoTagsToken":35,"TAGSTART":36,"TAGEND":37,"==":38,"--":39,"PCT":40,"DEFAULT":41,"SPACE":42,"MINUS":43,"keywords":44,"UNICODE_TEXT":45,"NUM":46,"ALPHA":47,"$accept":0,"$end":1},
+terminals_: {2:"error",5:"CLASS_DIAGRAM",6:"NEWLINE",8:"EOF",13:"LABEL",16:"CLASS",17:"STRUCT_START",19:"STRUCT_STOP",20:"MEMBER",21:"SEPARATOR",23:"STR",26:"AGGREGATION",27:"EXTENSION",28:"COMPOSITION",29:"DEPENDENCY",30:"LINE",31:"DOTTED_LINE",34:"graphCodeTokens",36:"TAGSTART",37:"TAGEND",38:"==",39:"--",40:"PCT",41:"DEFAULT",42:"SPACE",43:"MINUS",44:"keywords",45:"UNICODE_TEXT",46:"NUM",47:"ALPHA"},
+productions_: [0,[3,1],[4,4],[7,1],[7,3],[10,2],[10,1],[9,1],[9,2],[9,1],[9,1],[14,2],[14,5],[18,1],[18,2],[15,1],[15,2],[15,1],[15,1],[12,3],[12,4],[12,4],[12,5],[22,3],[22,2],[22,2],[22,1],[24,1],[24,1],[24,1],[24,1],[25,1],[25,1],[32,1],[32,1],[33,1],[33,1],[33,1],[33,1],[33,1],[33,1],[33,1],[35,1],[35,1],[35,1],[35,1],[11,1],[11,1],[11,1]],
+performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
+/* this == yyval */
 
-var classDiagram = (function () {
-    var o = function o(k, v, _o, l) {
-        for (_o = _o || {}, l = k.length; l--; _o[k[l]] = v);return _o;
-    },
-        $V0 = [1, 11],
-        $V1 = [1, 12],
-        $V2 = [1, 13],
-        $V3 = [1, 15],
-        $V4 = [1, 16],
-        $V5 = [1, 17],
-        $V6 = [6, 8],
-        $V7 = [1, 26],
-        $V8 = [1, 27],
-        $V9 = [1, 28],
-        $Va = [1, 29],
-        $Vb = [1, 30],
-        $Vc = [1, 31],
-        $Vd = [6, 8, 13, 17, 23, 26, 27, 28, 29, 30, 31],
-        $Ve = [6, 8, 13, 17, 23, 26, 27, 28, 29, 30, 31, 45, 46, 47],
-        $Vf = [23, 45, 46, 47],
-        $Vg = [23, 30, 31, 45, 46, 47],
-        $Vh = [23, 26, 27, 28, 29, 45, 46, 47],
-        $Vi = [6, 8, 13],
-        $Vj = [1, 46];
-    var parser = { trace: function trace() {},
-        yy: {},
-        symbols_: { "error": 2, "mermaidDoc": 3, "graphConfig": 4, "CLASS_DIAGRAM": 5, "NEWLINE": 6, "statements": 7, "EOF": 8, "statement": 9, "className": 10, "alphaNumToken": 11, "relationStatement": 12, "LABEL": 13, "classStatement": 14, "methodStatement": 15, "CLASS": 16, "STRUCT_START": 17, "members": 18, "STRUCT_STOP": 19, "MEMBER": 20, "SEPARATOR": 21, "relation": 22, "STR": 23, "relationType": 24, "lineType": 25, "AGGREGATION": 26, "EXTENSION": 27, "COMPOSITION": 28, "DEPENDENCY": 29, "LINE": 30, "DOTTED_LINE": 31, "commentToken": 32, "textToken": 33, "graphCodeTokens": 34, "textNoTagsToken": 35, "TAGSTART": 36, "TAGEND": 37, "==": 38, "--": 39, "PCT": 40, "DEFAULT": 41, "SPACE": 42, "MINUS": 43, "keywords": 44, "UNICODE_TEXT": 45, "NUM": 46, "ALPHA": 47, "$accept": 0, "$end": 1 },
-        terminals_: { 2: "error", 5: "CLASS_DIAGRAM", 6: "NEWLINE", 8: "EOF", 13: "LABEL", 16: "CLASS", 17: "STRUCT_START", 19: "STRUCT_STOP", 20: "MEMBER", 21: "SEPARATOR", 23: "STR", 26: "AGGREGATION", 27: "EXTENSION", 28: "COMPOSITION", 29: "DEPENDENCY", 30: "LINE", 31: "DOTTED_LINE", 34: "graphCodeTokens", 36: "TAGSTART", 37: "TAGEND", 38: "==", 39: "--", 40: "PCT", 41: "DEFAULT", 42: "SPACE", 43: "MINUS", 44: "keywords", 45: "UNICODE_TEXT", 46: "NUM", 47: "ALPHA" },
-        productions_: [0, [3, 1], [4, 4], [7, 1], [7, 3], [10, 2], [10, 1], [9, 1], [9, 2], [9, 1], [9, 1], [14, 2], [14, 5], [18, 1], [18, 2], [15, 1], [15, 2], [15, 1], [15, 1], [12, 3], [12, 4], [12, 4], [12, 5], [22, 3], [22, 2], [22, 2], [22, 1], [24, 1], [24, 1], [24, 1], [24, 1], [25, 1], [25, 1], [32, 1], [32, 1], [33, 1], [33, 1], [33, 1], [33, 1], [33, 1], [33, 1], [33, 1], [35, 1], [35, 1], [35, 1], [35, 1], [11, 1], [11, 1], [11, 1]],
-        performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, /* action[1] */$$, /* vstack */_$ /* lstack */) {
-            /* this == yyval */
+var $0 = $$.length - 1;
+switch (yystate) {
+case 5:
+ this.$=$$[$0-1]+$$[$0]; 
+break;
+case 6:
+ this.$=$$[$0]; 
+break;
+case 7:
+ yy.addRelation($$[$0]); 
+break;
+case 8:
+ $$[$0-1].title =  yy.cleanupLabel($$[$0]); yy.addRelation($$[$0-1]);        
+break;
+case 12:
+/*console.log($$[$0-3],JSON.stringify($$[$0-1]));*/yy.addMembers($$[$0-3],$$[$0-1]);
+break;
+case 13:
+ this.$ = [$$[$0]]; 
+break;
+case 14:
+ $$[$0].push($$[$0-1]);this.$=$$[$0];
+break;
+case 15:
+/*console.log('Rel found',$$[$0]);*/
+break;
+case 16:
+yy.addMembers($$[$0-1],yy.cleanupLabel($$[$0]));
+break;
+case 17:
+console.warn('Member',$$[$0]);
+break;
+case 18:
+/*console.log('sep found',$$[$0]);*/
+break;
+case 19:
+ this.$ = {'id1':$$[$0-2],'id2':$$[$0], relation:$$[$0-1], relationTitle1:'none', relationTitle2:'none'}; 
+break;
+case 20:
+ this.$ = {id1:$$[$0-3], id2:$$[$0], relation:$$[$0-1], relationTitle1:$$[$0-2], relationTitle2:'none'}
+break;
+case 21:
+ this.$ = {id1:$$[$0-3], id2:$$[$0], relation:$$[$0-2], relationTitle1:'none', relationTitle2:$$[$0-1]}; 
+break;
+case 22:
+ this.$ = {id1:$$[$0-4], id2:$$[$0], relation:$$[$0-2], relationTitle1:$$[$0-3], relationTitle2:$$[$0-1]} 
+break;
+case 23:
+ this.$={type1:$$[$0-2],type2:$$[$0],lineType:$$[$0-1]}; 
+break;
+case 24:
+ this.$={type1:'none',type2:$$[$0],lineType:$$[$0-1]}; 
+break;
+case 25:
+ this.$={type1:$$[$0-1],type2:'none',lineType:$$[$0]}; 
+break;
+case 26:
+ this.$={type1:'none',type2:'none',lineType:$$[$0]}; 
+break;
+case 27:
+ this.$=yy.relationType.AGGREGATION;
+break;
+case 28:
+ this.$=yy.relationType.EXTENSION;
+break;
+case 29:
+ this.$=yy.relationType.COMPOSITION;
+break;
+case 30:
+ this.$=yy.relationType.DEPENDENCY;
+break;
+case 31:
+this.$=yy.lineType.LINE;
+break;
+case 32:
+this.$=yy.lineType.DOTTED_LINE;
+break;
+}
+},
+table: [{3:1,4:2,5:[1,3]},{1:[3]},{1:[2,1]},{6:[1,4]},{7:5,9:6,10:10,11:14,12:7,14:8,15:9,16:$V0,20:$V1,21:$V2,45:$V3,46:$V4,47:$V5},{8:[1,18]},{6:[1,19],8:[2,3]},o($V6,[2,7],{13:[1,20]}),o($V6,[2,9]),o($V6,[2,10]),o($V6,[2,15],{22:21,24:24,25:25,13:[1,23],23:[1,22],26:$V7,27:$V8,28:$V9,29:$Va,30:$Vb,31:$Vc}),{10:32,11:14,45:$V3,46:$V4,47:$V5},o($V6,[2,17]),o($V6,[2,18]),o($Vd,[2,6],{11:14,10:33,45:$V3,46:$V4,47:$V5}),o($Ve,[2,46]),o($Ve,[2,47]),o($Ve,[2,48]),{1:[2,2]},{7:34,9:6,10:10,11:14,12:7,14:8,15:9,16:$V0,20:$V1,21:$V2,45:$V3,46:$V4,47:$V5},o($V6,[2,8]),{10:35,11:14,23:[1,36],45:$V3,46:$V4,47:$V5},{22:37,24:24,25:25,26:$V7,27:$V8,28:$V9,29:$Va,30:$Vb,31:$Vc},o($V6,[2,16]),{25:38,30:$Vb,31:$Vc},o($Vf,[2,26],{24:39,26:$V7,27:$V8,28:$V9,29:$Va}),o($Vg,[2,27]),o($Vg,[2,28]),o($Vg,[2,29]),o($Vg,[2,30]),o($Vh,[2,31]),o($Vh,[2,32]),o($V6,[2,11],{17:[1,40]}),o($Vd,[2,5]),{8:[2,4]},o($Vi,[2,19]),{10:41,11:14,45:$V3,46:$V4,47:$V5},{10:42,11:14,23:[1,43],45:$V3,46:$V4,47:$V5},o($Vf,[2,25],{24:44,26:$V7,27:$V8,28:$V9,29:$Va}),o($Vf,[2,24]),{18:45,20:$Vj},o($Vi,[2,21]),o($Vi,[2,20]),{10:47,11:14,45:$V3,46:$V4,47:$V5},o($Vf,[2,23]),{19:[1,48]},{18:49,19:[2,13],20:$Vj},o($Vi,[2,22]),o($V6,[2,12]),{19:[2,14]}],
+defaultActions: {2:[2,1],18:[2,2],34:[2,4],49:[2,14]},
+parseError: function parseError(str, hash) {
+    if (hash.recoverable) {
+        this.trace(str);
+    } else {
+        function _parseError (msg, hash) {
+            this.message = msg;
+            this.hash = hash;
+        }
+        _parseError.prototype = new Error();
 
-            var $0 = $$.length - 1;
-            switch (yystate) {
-                case 5:
-                    this.$ = $$[$0 - 1] + $$[$0];
-                    break;
-                case 6:
-                    this.$ = $$[$0];
-                    break;
-                case 7:
-                    yy.addRelation($$[$0]);
-                    break;
-                case 8:
-                    $$[$0 - 1].title = yy.cleanupLabel($$[$0]);yy.addRelation($$[$0 - 1]);
-                    break;
-                case 12:
-                    /*console.log($$[$0-3],JSON.stringify($$[$0-1]));*/yy.addMembers($$[$0 - 3], $$[$0 - 1]);
-                    break;
-                case 13:
-                    this.$ = [$$[$0]];
-                    break;
-                case 14:
-                    $$[$0].push($$[$0 - 1]);this.$ = $$[$0];
-                    break;
-                case 15:
-                    /*console.log('Rel found',$$[$0]);*/
-                    break;
-                case 16:
-                    yy.addMembers($$[$0 - 1], yy.cleanupLabel($$[$0]));
-                    break;
-                case 17:
-                    console.warn('Member', $$[$0]);
-                    break;
-                case 18:
-                    /*console.log('sep found',$$[$0]);*/
-                    break;
-                case 19:
-                    this.$ = { 'id1': $$[$0 - 2], 'id2': $$[$0], relation: $$[$0 - 1], relationTitle1: 'none', relationTitle2: 'none' };
-                    break;
-                case 20:
-                    this.$ = { id1: $$[$0 - 3], id2: $$[$0], relation: $$[$0 - 1], relationTitle1: $$[$0 - 2], relationTitle2: 'none' };
-                    break;
-                case 21:
-                    this.$ = { id1: $$[$0 - 3], id2: $$[$0], relation: $$[$0 - 2], relationTitle1: 'none', relationTitle2: $$[$0 - 1] };
-                    break;
-                case 22:
-                    this.$ = { id1: $$[$0 - 4], id2: $$[$0], relation: $$[$0 - 2], relationTitle1: $$[$0 - 3], relationTitle2: $$[$0 - 1] };
-                    break;
-                case 23:
-                    this.$ = { type1: $$[$0 - 2], type2: $$[$0], lineType: $$[$0 - 1] };
-                    break;
-                case 24:
-                    this.$ = { type1: 'none', type2: $$[$0], lineType: $$[$0 - 1] };
-                    break;
-                case 25:
-                    this.$ = { type1: $$[$0 - 1], type2: 'none', lineType: $$[$0] };
-                    break;
-                case 26:
-                    this.$ = { type1: 'none', type2: 'none', lineType: $$[$0] };
-                    break;
-                case 27:
-                    this.$ = yy.relationType.AGGREGATION;
-                    break;
-                case 28:
-                    this.$ = yy.relationType.EXTENSION;
-                    break;
-                case 29:
-                    this.$ = yy.relationType.COMPOSITION;
-                    break;
-                case 30:
-                    this.$ = yy.relationType.DEPENDENCY;
-                    break;
-                case 31:
-                    this.$ = yy.lineType.LINE;
-                    break;
-                case 32:
-                    this.$ = yy.lineType.DOTTED_LINE;
-                    break;
+        throw new _parseError(str, hash);
+    }
+},
+parse: function parse(input) {
+    var self = this, stack = [0], tstack = [], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, recovering = 0, TERROR = 2, EOF = 1;
+    var args = lstack.slice.call(arguments, 1);
+    var lexer = Object.create(this.lexer);
+    var sharedState = { yy: {} };
+    for (var k in this.yy) {
+        if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
+            sharedState.yy[k] = this.yy[k];
+        }
+    }
+    lexer.setInput(input, sharedState.yy);
+    sharedState.yy.lexer = lexer;
+    sharedState.yy.parser = this;
+    if (typeof lexer.yylloc == 'undefined') {
+        lexer.yylloc = {};
+    }
+    var yyloc = lexer.yylloc;
+    lstack.push(yyloc);
+    var ranges = lexer.options && lexer.options.ranges;
+    if (typeof sharedState.yy.parseError === 'function') {
+        this.parseError = sharedState.yy.parseError;
+    } else {
+        this.parseError = Object.getPrototypeOf(this).parseError;
+    }
+    function popStack(n) {
+        stack.length = stack.length - 2 * n;
+        vstack.length = vstack.length - n;
+        lstack.length = lstack.length - n;
+    }
+    _token_stack:
+        var lex = function () {
+            var token;
+            token = lexer.lex() || EOF;
+            if (typeof token !== 'number') {
+                token = self.symbols_[token] || token;
             }
-        },
-        table: [{ 3: 1, 4: 2, 5: [1, 3] }, { 1: [3] }, { 1: [2, 1] }, { 6: [1, 4] }, { 7: 5, 9: 6, 10: 10, 11: 14, 12: 7, 14: 8, 15: 9, 16: $V0, 20: $V1, 21: $V2, 45: $V3, 46: $V4, 47: $V5 }, { 8: [1, 18] }, { 6: [1, 19], 8: [2, 3] }, o($V6, [2, 7], { 13: [1, 20] }), o($V6, [2, 9]), o($V6, [2, 10]), o($V6, [2, 15], { 22: 21, 24: 24, 25: 25, 13: [1, 23], 23: [1, 22], 26: $V7, 27: $V8, 28: $V9, 29: $Va, 30: $Vb, 31: $Vc }), { 10: 32, 11: 14, 45: $V3, 46: $V4, 47: $V5 }, o($V6, [2, 17]), o($V6, [2, 18]), o($Vd, [2, 6], { 11: 14, 10: 33, 45: $V3, 46: $V4, 47: $V5 }), o($Ve, [2, 46]), o($Ve, [2, 47]), o($Ve, [2, 48]), { 1: [2, 2] }, { 7: 34, 9: 6, 10: 10, 11: 14, 12: 7, 14: 8, 15: 9, 16: $V0, 20: $V1, 21: $V2, 45: $V3, 46: $V4, 47: $V5 }, o($V6, [2, 8]), { 10: 35, 11: 14, 23: [1, 36], 45: $V3, 46: $V4, 47: $V5 }, { 22: 37, 24: 24, 25: 25, 26: $V7, 27: $V8, 28: $V9, 29: $Va, 30: $Vb, 31: $Vc }, o($V6, [2, 16]), { 25: 38, 30: $Vb, 31: $Vc }, o($Vf, [2, 26], { 24: 39, 26: $V7, 27: $V8, 28: $V9, 29: $Va }), o($Vg, [2, 27]), o($Vg, [2, 28]), o($Vg, [2, 29]), o($Vg, [2, 30]), o($Vh, [2, 31]), o($Vh, [2, 32]), o($V6, [2, 11], { 17: [1, 40] }), o($Vd, [2, 5]), { 8: [2, 4] }, o($Vi, [2, 19]), { 10: 41, 11: 14, 45: $V3, 46: $V4, 47: $V5 }, { 10: 42, 11: 14, 23: [1, 43], 45: $V3, 46: $V4, 47: $V5 }, o($Vf, [2, 25], { 24: 44, 26: $V7, 27: $V8, 28: $V9, 29: $Va }), o($Vf, [2, 24]), { 18: 45, 20: $Vj }, o($Vi, [2, 21]), o($Vi, [2, 20]), { 10: 47, 11: 14, 45: $V3, 46: $V4, 47: $V5 }, o($Vf, [2, 23]), { 19: [1, 48] }, { 18: 49, 19: [2, 13], 20: $Vj }, o($Vi, [2, 22]), o($V6, [2, 12]), { 19: [2, 14] }],
-        defaultActions: { 2: [2, 1], 18: [2, 2], 34: [2, 4], 49: [2, 14] },
-        parseError: function parseError(str, hash) {
-            if (hash.recoverable) {
-                this.trace(str);
-            } else {
-                var _parseError = function _parseError(msg, hash) {
-                    this.message = msg;
-                    this.hash = hash;
-                };
-
-                _parseError.prototype = new Error();
-
-                throw new _parseError(str, hash);
+            return token;
+        };
+    var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
+    while (true) {
+        state = stack[stack.length - 1];
+        if (this.defaultActions[state]) {
+            action = this.defaultActions[state];
+        } else {
+            if (symbol === null || typeof symbol == 'undefined') {
+                symbol = lex();
             }
-        },
-        parse: function parse(input) {
-            var self = this,
-                stack = [0],
-                tstack = [],
-                vstack = [null],
-                lstack = [],
-                table = this.table,
-                yytext = '',
-                yylineno = 0,
-                yyleng = 0,
-                recovering = 0,
-                TERROR = 2,
-                EOF = 1;
-            var args = lstack.slice.call(arguments, 1);
-            var lexer = Object.create(this.lexer);
-            var sharedState = { yy: {} };
-            for (var k in this.yy) {
-                if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
-                    sharedState.yy[k] = this.yy[k];
+            action = table[state] && table[state][symbol];
+        }
+                    if (typeof action === 'undefined' || !action.length || !action[0]) {
+                var errStr = '';
+                expected = [];
+                for (p in table[state]) {
+                    if (this.terminals_[p] && p > TERROR) {
+                        expected.push('\'' + this.terminals_[p] + '\'');
+                    }
                 }
-            }
-            lexer.setInput(input, sharedState.yy);
-            sharedState.yy.lexer = lexer;
-            sharedState.yy.parser = this;
-            if (typeof lexer.yylloc == 'undefined') {
-                lexer.yylloc = {};
-            }
-            var yyloc = lexer.yylloc;
-            lstack.push(yyloc);
-            var ranges = lexer.options && lexer.options.ranges;
-            if (typeof sharedState.yy.parseError === 'function') {
-                this.parseError = sharedState.yy.parseError;
-            } else {
-                this.parseError = Object.getPrototypeOf(this).parseError;
-            }
-            function popStack(n) {
-                stack.length = stack.length - 2 * n;
-                vstack.length = vstack.length - n;
-                lstack.length = lstack.length - n;
-            }
-            _token_stack: var lex = function lex() {
-                var token;
-                token = lexer.lex() || EOF;
-                if (typeof token !== 'number') {
-                    token = self.symbols_[token] || token;
+                if (lexer.showPosition) {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
+                } else {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
                 }
-                return token;
+                this.parseError(errStr, {
+                    text: lexer.match,
+                    token: this.terminals_[symbol] || symbol,
+                    line: lexer.yylineno,
+                    loc: yyloc,
+                    expected: expected
+                });
+            }
+        if (action[0] instanceof Array && action.length > 1) {
+            throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
+        }
+        switch (action[0]) {
+        case 1:
+            stack.push(symbol);
+            vstack.push(lexer.yytext);
+            lstack.push(lexer.yylloc);
+            stack.push(action[1]);
+            symbol = null;
+            if (!preErrorSymbol) {
+                yyleng = lexer.yyleng;
+                yytext = lexer.yytext;
+                yylineno = lexer.yylineno;
+                yyloc = lexer.yylloc;
+                if (recovering > 0) {
+                    recovering--;
+                }
+            } else {
+                symbol = preErrorSymbol;
+                preErrorSymbol = null;
+            }
+            break;
+        case 2:
+            len = this.productions_[action[1]][1];
+            yyval.$ = vstack[vstack.length - len];
+            yyval._$ = {
+                first_line: lstack[lstack.length - (len || 1)].first_line,
+                last_line: lstack[lstack.length - 1].last_line,
+                first_column: lstack[lstack.length - (len || 1)].first_column,
+                last_column: lstack[lstack.length - 1].last_column
             };
-            var symbol,
-                preErrorSymbol,
-                state,
-                action,
-                a,
-                r,
-                yyval = {},
-                p,
-                len,
-                newState,
-                expected;
-            while (true) {
-                state = stack[stack.length - 1];
-                if (this.defaultActions[state]) {
-                    action = this.defaultActions[state];
-                } else {
-                    if (symbol === null || typeof symbol == 'undefined') {
-                        symbol = lex();
-                    }
-                    action = table[state] && table[state][symbol];
-                }
-                if (typeof action === 'undefined' || !action.length || !action[0]) {
-                    var errStr = '';
-                    expected = [];
-                    for (p in table[state]) {
-                        if (this.terminals_[p] && p > TERROR) {
-                            expected.push('\'' + this.terminals_[p] + '\'');
-                        }
-                    }
-                    if (lexer.showPosition) {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
-                    } else {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
-                    }
-                    this.parseError(errStr, {
-                        text: lexer.match,
-                        token: this.terminals_[symbol] || symbol,
-                        line: lexer.yylineno,
-                        loc: yyloc,
-                        expected: expected
-                    });
-                }
-                if (action[0] instanceof Array && action.length > 1) {
-                    throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
-                }
-                switch (action[0]) {
-                    case 1:
-                        stack.push(symbol);
-                        vstack.push(lexer.yytext);
-                        lstack.push(lexer.yylloc);
-                        stack.push(action[1]);
-                        symbol = null;
-                        if (!preErrorSymbol) {
-                            yyleng = lexer.yyleng;
-                            yytext = lexer.yytext;
-                            yylineno = lexer.yylineno;
-                            yyloc = lexer.yylloc;
-                            if (recovering > 0) {
-                                recovering--;
-                            }
-                        } else {
-                            symbol = preErrorSymbol;
-                            preErrorSymbol = null;
-                        }
-                        break;
-                    case 2:
-                        len = this.productions_[action[1]][1];
-                        yyval.$ = vstack[vstack.length - len];
-                        yyval._$ = {
-                            first_line: lstack[lstack.length - (len || 1)].first_line,
-                            last_line: lstack[lstack.length - 1].last_line,
-                            first_column: lstack[lstack.length - (len || 1)].first_column,
-                            last_column: lstack[lstack.length - 1].last_column
-                        };
-                        if (ranges) {
-                            yyval._$.range = [lstack[lstack.length - (len || 1)].range[0], lstack[lstack.length - 1].range[1]];
-                        }
-                        r = this.performAction.apply(yyval, [yytext, yyleng, yylineno, sharedState.yy, action[1], vstack, lstack].concat(args));
-                        if (typeof r !== 'undefined') {
-                            return r;
-                        }
-                        if (len) {
-                            stack = stack.slice(0, -1 * len * 2);
-                            vstack = vstack.slice(0, -1 * len);
-                            lstack = lstack.slice(0, -1 * len);
-                        }
-                        stack.push(this.productions_[action[1]][0]);
-                        vstack.push(yyval.$);
-                        lstack.push(yyval._$);
-                        newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
-                        stack.push(newState);
-                        break;
-                    case 3:
-                        return true;
-                }
+            if (ranges) {
+                yyval._$.range = [
+                    lstack[lstack.length - (len || 1)].range[0],
+                    lstack[lstack.length - 1].range[1]
+                ];
             }
+            r = this.performAction.apply(yyval, [
+                yytext,
+                yyleng,
+                yylineno,
+                sharedState.yy,
+                action[1],
+                vstack,
+                lstack
+            ].concat(args));
+            if (typeof r !== 'undefined') {
+                return r;
+            }
+            if (len) {
+                stack = stack.slice(0, -1 * len * 2);
+                vstack = vstack.slice(0, -1 * len);
+                lstack = lstack.slice(0, -1 * len);
+            }
+            stack.push(this.productions_[action[1]][0]);
+            vstack.push(yyval.$);
+            lstack.push(yyval._$);
+            newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
+            stack.push(newState);
+            break;
+        case 3:
             return true;
-        } };
+        }
+    }
+    return true;
+}};
 
-    /* generated by jison-lex 0.3.4 */
-    var lexer = (function () {
-        var lexer = {
+/* generated by jison-lex 0.3.4 */
+var lexer = (function(){
+var lexer = ({
 
-            EOF: 1,
+EOF:1,
 
-            parseError: function parseError(str, hash) {
-                if (this.yy.parser) {
-                    this.yy.parser.parseError(str, hash);
-                } else {
-                    throw new Error(str);
-                }
-            },
+parseError:function parseError(str, hash) {
+        if (this.yy.parser) {
+            this.yy.parser.parseError(str, hash);
+        } else {
+            throw new Error(str);
+        }
+    },
 
-            // resets the lexer, sets new input
-            setInput: function setInput(input, yy) {
-                this.yy = yy || this.yy || {};
-                this._input = input;
-                this._more = this._backtrack = this.done = false;
-                this.yylineno = this.yyleng = 0;
-                this.yytext = this.matched = this.match = '';
-                this.conditionStack = ['INITIAL'];
-                this.yylloc = {
-                    first_line: 1,
-                    first_column: 0,
-                    last_line: 1,
-                    last_column: 0
-                };
-                if (this.options.ranges) {
-                    this.yylloc.range = [0, 0];
-                }
-                this.offset = 0;
-                return this;
-            },
+// resets the lexer, sets new input
+setInput:function (input, yy) {
+        this.yy = yy || this.yy || {};
+        this._input = input;
+        this._more = this._backtrack = this.done = false;
+        this.yylineno = this.yyleng = 0;
+        this.yytext = this.matched = this.match = '';
+        this.conditionStack = ['INITIAL'];
+        this.yylloc = {
+            first_line: 1,
+            first_column: 0,
+            last_line: 1,
+            last_column: 0
+        };
+        if (this.options.ranges) {
+            this.yylloc.range = [0,0];
+        }
+        this.offset = 0;
+        return this;
+    },
 
-            // consumes and returns one char from the input
-            input: function input() {
-                var ch = this._input[0];
-                this.yytext += ch;
-                this.yyleng++;
-                this.offset++;
-                this.match += ch;
-                this.matched += ch;
-                var lines = ch.match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno++;
-                    this.yylloc.last_line++;
-                } else {
-                    this.yylloc.last_column++;
-                }
-                if (this.options.ranges) {
-                    this.yylloc.range[1]++;
-                }
+// consumes and returns one char from the input
+input:function () {
+        var ch = this._input[0];
+        this.yytext += ch;
+        this.yyleng++;
+        this.offset++;
+        this.match += ch;
+        this.matched += ch;
+        var lines = ch.match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno++;
+            this.yylloc.last_line++;
+        } else {
+            this.yylloc.last_column++;
+        }
+        if (this.options.ranges) {
+            this.yylloc.range[1]++;
+        }
 
-                this._input = this._input.slice(1);
-                return ch;
-            },
+        this._input = this._input.slice(1);
+        return ch;
+    },
 
-            // unshifts one char (or a string) into the input
-            unput: function unput(ch) {
-                var len = ch.length;
-                var lines = ch.split(/(?:\r\n?|\n)/g);
+// unshifts one char (or a string) into the input
+unput:function (ch) {
+        var len = ch.length;
+        var lines = ch.split(/(?:\r\n?|\n)/g);
 
-                this._input = ch + this._input;
-                this.yytext = this.yytext.substr(0, this.yytext.length - len);
-                //this.yyleng -= len;
-                this.offset -= len;
-                var oldLines = this.match.split(/(?:\r\n?|\n)/g);
-                this.match = this.match.substr(0, this.match.length - 1);
-                this.matched = this.matched.substr(0, this.matched.length - 1);
+        this._input = ch + this._input;
+        this.yytext = this.yytext.substr(0, this.yytext.length - len);
+        //this.yyleng -= len;
+        this.offset -= len;
+        var oldLines = this.match.split(/(?:\r\n?|\n)/g);
+        this.match = this.match.substr(0, this.match.length - 1);
+        this.matched = this.matched.substr(0, this.matched.length - 1);
 
-                if (lines.length - 1) {
-                    this.yylineno -= lines.length - 1;
-                }
-                var r = this.yylloc.range;
+        if (lines.length - 1) {
+            this.yylineno -= lines.length - 1;
+        }
+        var r = this.yylloc.range;
 
-                this.yylloc = {
+        this.yylloc = {
+            first_line: this.yylloc.first_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.first_column,
+            last_column: lines ?
+                (lines.length === oldLines.length ? this.yylloc.first_column : 0)
+                 + oldLines[oldLines.length - lines.length].length - lines[0].length :
+              this.yylloc.first_column - len
+        };
+
+        if (this.options.ranges) {
+            this.yylloc.range = [r[0], r[0] + this.yyleng - len];
+        }
+        this.yyleng = this.yytext.length;
+        return this;
+    },
+
+// When called from action, caches matched text and appends it on next action
+more:function () {
+        this._more = true;
+        return this;
+    },
+
+// When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
+reject:function () {
+        if (this.options.backtrack_lexer) {
+            this._backtrack = true;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+
+        }
+        return this;
+    },
+
+// retain first n characters of the match
+less:function (n) {
+        this.unput(this.match.slice(n));
+    },
+
+// displays already matched input, i.e. for error messages
+pastInput:function () {
+        var past = this.matched.substr(0, this.matched.length - this.match.length);
+        return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
+    },
+
+// displays upcoming input, i.e. for error messages
+upcomingInput:function () {
+        var next = this.match;
+        if (next.length < 20) {
+            next += this._input.substr(0, 20-next.length);
+        }
+        return (next.substr(0,20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
+    },
+
+// displays the character position where the lexing error occurred, i.e. for error messages
+showPosition:function () {
+        var pre = this.pastInput();
+        var c = new Array(pre.length + 1).join("-");
+        return pre + this.upcomingInput() + "\n" + c + "^";
+    },
+
+// test the lexed token: return FALSE when not a match, otherwise return token
+test_match:function (match, indexed_rule) {
+        var token,
+            lines,
+            backup;
+
+        if (this.options.backtrack_lexer) {
+            // save context
+            backup = {
+                yylineno: this.yylineno,
+                yylloc: {
                     first_line: this.yylloc.first_line,
-                    last_line: this.yylineno + 1,
+                    last_line: this.last_line,
                     first_column: this.yylloc.first_column,
-                    last_column: lines ? (lines.length === oldLines.length ? this.yylloc.first_column : 0) + oldLines[oldLines.length - lines.length].length - lines[0].length : this.yylloc.first_column - len
-                };
+                    last_column: this.yylloc.last_column
+                },
+                yytext: this.yytext,
+                match: this.match,
+                matches: this.matches,
+                matched: this.matched,
+                yyleng: this.yyleng,
+                offset: this.offset,
+                _more: this._more,
+                _input: this._input,
+                yy: this.yy,
+                conditionStack: this.conditionStack.slice(0),
+                done: this.done
+            };
+            if (this.options.ranges) {
+                backup.yylloc.range = this.yylloc.range.slice(0);
+            }
+        }
 
-                if (this.options.ranges) {
-                    this.yylloc.range = [r[0], r[0] + this.yyleng - len];
-                }
-                this.yyleng = this.yytext.length;
-                return this;
-            },
+        lines = match[0].match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno += lines.length;
+        }
+        this.yylloc = {
+            first_line: this.yylloc.last_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.last_column,
+            last_column: lines ?
+                         lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length :
+                         this.yylloc.last_column + match[0].length
+        };
+        this.yytext += match[0];
+        this.match += match[0];
+        this.matches = match;
+        this.yyleng = this.yytext.length;
+        if (this.options.ranges) {
+            this.yylloc.range = [this.offset, this.offset += this.yyleng];
+        }
+        this._more = false;
+        this._backtrack = false;
+        this._input = this._input.slice(match[0].length);
+        this.matched += match[0];
+        token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
+        if (this.done && this._input) {
+            this.done = false;
+        }
+        if (token) {
+            return token;
+        } else if (this._backtrack) {
+            // recover context
+            for (var k in backup) {
+                this[k] = backup[k];
+            }
+            return false; // rule action called reject() implying the next rule should be tested instead.
+        }
+        return false;
+    },
 
-            // When called from action, caches matched text and appends it on next action
-            more: function more() {
-                this._more = true;
-                return this;
-            },
+// return next match in input
+next:function () {
+        if (this.done) {
+            return this.EOF;
+        }
+        if (!this._input) {
+            this.done = true;
+        }
 
-            // When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
-            reject: function reject() {
+        var token,
+            match,
+            tempMatch,
+            index;
+        if (!this._more) {
+            this.yytext = '';
+            this.match = '';
+        }
+        var rules = this._currentRules();
+        for (var i = 0; i < rules.length; i++) {
+            tempMatch = this._input.match(this.rules[rules[i]]);
+            if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
+                match = tempMatch;
+                index = i;
                 if (this.options.backtrack_lexer) {
-                    this._backtrack = true;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-                return this;
-            },
-
-            // retain first n characters of the match
-            less: function less(n) {
-                this.unput(this.match.slice(n));
-            },
-
-            // displays already matched input, i.e. for error messages
-            pastInput: function pastInput() {
-                var past = this.matched.substr(0, this.matched.length - this.match.length);
-                return (past.length > 20 ? '...' : '') + past.substr(-20).replace(/\n/g, "");
-            },
-
-            // displays upcoming input, i.e. for error messages
-            upcomingInput: function upcomingInput() {
-                var next = this.match;
-                if (next.length < 20) {
-                    next += this._input.substr(0, 20 - next.length);
-                }
-                return (next.substr(0, 20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
-            },
-
-            // displays the character position where the lexing error occurred, i.e. for error messages
-            showPosition: function showPosition() {
-                var pre = this.pastInput();
-                var c = new Array(pre.length + 1).join("-");
-                return pre + this.upcomingInput() + "\n" + c + "^";
-            },
-
-            // test the lexed token: return FALSE when not a match, otherwise return token
-            test_match: function test_match(match, indexed_rule) {
-                var token, lines, backup;
-
-                if (this.options.backtrack_lexer) {
-                    // save context
-                    backup = {
-                        yylineno: this.yylineno,
-                        yylloc: {
-                            first_line: this.yylloc.first_line,
-                            last_line: this.last_line,
-                            first_column: this.yylloc.first_column,
-                            last_column: this.yylloc.last_column
-                        },
-                        yytext: this.yytext,
-                        match: this.match,
-                        matches: this.matches,
-                        matched: this.matched,
-                        yyleng: this.yyleng,
-                        offset: this.offset,
-                        _more: this._more,
-                        _input: this._input,
-                        yy: this.yy,
-                        conditionStack: this.conditionStack.slice(0),
-                        done: this.done
-                    };
-                    if (this.options.ranges) {
-                        backup.yylloc.range = this.yylloc.range.slice(0);
-                    }
-                }
-
-                lines = match[0].match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno += lines.length;
-                }
-                this.yylloc = {
-                    first_line: this.yylloc.last_line,
-                    last_line: this.yylineno + 1,
-                    first_column: this.yylloc.last_column,
-                    last_column: lines ? lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length : this.yylloc.last_column + match[0].length
-                };
-                this.yytext += match[0];
-                this.match += match[0];
-                this.matches = match;
-                this.yyleng = this.yytext.length;
-                if (this.options.ranges) {
-                    this.yylloc.range = [this.offset, this.offset += this.yyleng];
-                }
-                this._more = false;
-                this._backtrack = false;
-                this._input = this._input.slice(match[0].length);
-                this.matched += match[0];
-                token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
-                if (this.done && this._input) {
-                    this.done = false;
-                }
-                if (token) {
-                    return token;
-                } else if (this._backtrack) {
-                    // recover context
-                    for (var k in backup) {
-                        this[k] = backup[k];
-                    }
-                    return false; // rule action called reject() implying the next rule should be tested instead.
-                }
-                return false;
-            },
-
-            // return next match in input
-            next: function next() {
-                if (this.done) {
-                    return this.EOF;
-                }
-                if (!this._input) {
-                    this.done = true;
-                }
-
-                var token, match, tempMatch, index;
-                if (!this._more) {
-                    this.yytext = '';
-                    this.match = '';
-                }
-                var rules = this._currentRules();
-                for (var i = 0; i < rules.length; i++) {
-                    tempMatch = this._input.match(this.rules[rules[i]]);
-                    if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
-                        match = tempMatch;
-                        index = i;
-                        if (this.options.backtrack_lexer) {
-                            token = this.test_match(tempMatch, rules[i]);
-                            if (token !== false) {
-                                return token;
-                            } else if (this._backtrack) {
-                                match = false;
-                                continue; // rule action called reject() implying a rule MISmatch.
-                            } else {
-                                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                                    return false;
-                                }
-                        } else if (!this.options.flex) {
-                            break;
-                        }
-                    }
-                }
-                if (match) {
-                    token = this.test_match(match, rules[index]);
+                    token = this.test_match(tempMatch, rules[i]);
                     if (token !== false) {
                         return token;
+                    } else if (this._backtrack) {
+                        match = false;
+                        continue; // rule action called reject() implying a rule MISmatch.
+                    } else {
+                        // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+                        return false;
                     }
-                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                    return false;
+                } else if (!this.options.flex) {
+                    break;
                 }
-                if (this._input === "") {
-                    return this.EOF;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-            },
+            }
+        }
+        if (match) {
+            token = this.test_match(match, rules[index]);
+            if (token !== false) {
+                return token;
+            }
+            // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+            return false;
+        }
+        if (this._input === "") {
+            return this.EOF;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+        }
+    },
 
-            // return next match that has a token
-            lex: function lex() {
-                var r = this.next();
-                if (r) {
-                    return r;
-                } else {
-                    return this.lex();
-                }
-            },
+// return next match that has a token
+lex:function lex() {
+        var r = this.next();
+        if (r) {
+            return r;
+        } else {
+            return this.lex();
+        }
+    },
 
-            // activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
-            begin: function begin(condition) {
-                this.conditionStack.push(condition);
-            },
+// activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
+begin:function begin(condition) {
+        this.conditionStack.push(condition);
+    },
 
-            // pop the previously active lexer condition state off the condition stack
-            popState: function popState() {
-                var n = this.conditionStack.length - 1;
-                if (n > 0) {
-                    return this.conditionStack.pop();
-                } else {
-                    return this.conditionStack[0];
-                }
-            },
+// pop the previously active lexer condition state off the condition stack
+popState:function popState() {
+        var n = this.conditionStack.length - 1;
+        if (n > 0) {
+            return this.conditionStack.pop();
+        } else {
+            return this.conditionStack[0];
+        }
+    },
 
-            // produce the lexer rule set which is active for the currently active lexer condition state
-            _currentRules: function _currentRules() {
-                if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
-                    return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
-                } else {
-                    return this.conditions["INITIAL"].rules;
-                }
-            },
+// produce the lexer rule set which is active for the currently active lexer condition state
+_currentRules:function _currentRules() {
+        if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
+            return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
+        } else {
+            return this.conditions["INITIAL"].rules;
+        }
+    },
 
-            // return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
-            topState: function topState(n) {
-                n = this.conditionStack.length - 1 - Math.abs(n || 0);
-                if (n >= 0) {
-                    return this.conditionStack[n];
-                } else {
-                    return "INITIAL";
-                }
-            },
+// return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
+topState:function topState(n) {
+        n = this.conditionStack.length - 1 - Math.abs(n || 0);
+        if (n >= 0) {
+            return this.conditionStack[n];
+        } else {
+            return "INITIAL";
+        }
+    },
 
-            // alias for begin(condition)
-            pushState: function pushState(condition) {
-                this.begin(condition);
-            },
+// alias for begin(condition)
+pushState:function pushState(condition) {
+        this.begin(condition);
+    },
 
-            // return the number of states currently on the stack
-            stateStackSize: function stateStackSize() {
-                return this.conditionStack.length;
-            },
-            options: {},
-            performAction: function anonymous(yy, yy_, $avoiding_name_collisions, YY_START) {
-                var YYSTATE = YY_START;
-                switch ($avoiding_name_collisions) {
-                    case 0:
-                        /* do nothing */
-                        break;
-                    case 1:
-                        return 6;
-                        break;
-                    case 2:
-                        /* skip whitespace */
-                        break;
-                    case 3:
-                        return 5;
-                        break;
-                    case 4:
-                        this.begin("struct"); /*console.log('Starting struct');*/return 17;
-                        break;
-                    case 5:
-                        /*console.log('Ending struct');*/this.popState();return 19;
-                        break;
-                    case 6:
-                        /* nothing */
-                        break;
-                    case 7:
-                        /*console.log('lex-member: ' + yy_.yytext);*/return "MEMBER";
-                        break;
-                    case 8:
-                        return 16;
-                        break;
-                    case 9:
-                        this.begin("string");
-                        break;
-                    case 10:
-                        this.popState();
-                        break;
-                    case 11:
-                        return "STR";
-                        break;
-                    case 12:
-                        return 27;
-                        break;
-                    case 13:
-                        return 27;
-                        break;
-                    case 14:
-                        return 29;
-                        break;
-                    case 15:
-                        return 29;
-                        break;
-                    case 16:
-                        return 28;
-                        break;
-                    case 17:
-                        return 26;
-                        break;
-                    case 18:
-                        return 30;
-                        break;
-                    case 19:
-                        return 31;
-                        break;
-                    case 20:
-                        return 13;
-                        break;
-                    case 21:
-                        return 43;
-                        break;
-                    case 22:
-                        return 'DOT';
-                        break;
-                    case 23:
-                        return 'PLUS';
-                        break;
-                    case 24:
-                        return 40;
-                        break;
-                    case 25:
-                        return 'EQUALS';
-                        break;
-                    case 26:
-                        return 'EQUALS';
-                        break;
-                    case 27:
-                        return 47;
-                        break;
-                    case 28:
-                        return 'PUNCTUATION';
-                        break;
-                    case 29:
-                        return 46;
-                        break;
-                    case 30:
-                        return 45;
-                        break;
-                    case 31:
-                        return 42;
-                        break;
-                    case 32:
-                        return 8;
-                        break;
-                }
-            },
-            rules: [/^(?:%%[^\n]*)/, /^(?:\n+)/, /^(?:\s+)/, /^(?:classDiagram\b)/, /^(?:[\{])/, /^(?:\})/, /^(?:[\n])/, /^(?:[^\{\}\n]*)/, /^(?:class\b)/, /^(?:["])/, /^(?:["])/, /^(?:[^"]*)/, /^(?:\s*<\|)/, /^(?:\s*\|>)/, /^(?:\s*>)/, /^(?:\s*<)/, /^(?:\s*\*)/, /^(?:\s*o\b)/, /^(?:--)/, /^(?:\.\.)/, /^(?::[^#\n;]+)/, /^(?:-)/, /^(?:\.)/, /^(?:\+)/, /^(?:%)/, /^(?:=)/, /^(?:=)/, /^(?:[A-Za-z]+)/, /^(?:[!"#$%&'*+,-.`?\\_\/])/, /^(?:[0-9]+)/, /^(?:[\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6]|[\u00F8-\u02C1\u02C6-\u02D1\u02E0-\u02E4\u02EC\u02EE\u0370-\u0374\u0376\u0377]|[\u037A-\u037D\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03F5]|[\u03F7-\u0481\u048A-\u0527\u0531-\u0556\u0559\u0561-\u0587\u05D0-\u05EA]|[\u05F0-\u05F2\u0620-\u064A\u066E\u066F\u0671-\u06D3\u06D5\u06E5\u06E6\u06EE]|[\u06EF\u06FA-\u06FC\u06FF\u0710\u0712-\u072F\u074D-\u07A5\u07B1\u07CA-\u07EA]|[\u07F4\u07F5\u07FA\u0800-\u0815\u081A\u0824\u0828\u0840-\u0858\u08A0]|[\u08A2-\u08AC\u0904-\u0939\u093D\u0950\u0958-\u0961\u0971-\u0977]|[\u0979-\u097F\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2]|[\u09B6-\u09B9\u09BD\u09CE\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A]|[\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39]|[\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8]|[\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AD0\u0AE0\u0AE1\u0B05-\u0B0C]|[\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B35-\u0B39\u0B3D\u0B5C]|[\u0B5D\u0B5F-\u0B61\u0B71\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99]|[\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB9\u0BD0]|[\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3D]|[\u0C58\u0C59\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3]|[\u0CB5-\u0CB9\u0CBD\u0CDE\u0CE0\u0CE1\u0CF1\u0CF2\u0D05-\u0D0C\u0D0E-\u0D10]|[\u0D12-\u0D3A\u0D3D\u0D4E\u0D60\u0D61\u0D7A-\u0D7F\u0D85-\u0D96\u0D9A-\u0DB1]|[\u0DB3-\u0DBB\u0DBD\u0DC0-\u0DC6\u0E01-\u0E30\u0E32\u0E33\u0E40-\u0E46\u0E81]|[\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3]|[\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD-\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0EC6]|[\u0EDC-\u0EDF\u0F00\u0F40-\u0F47\u0F49-\u0F6C\u0F88-\u0F8C\u1000-\u102A]|[\u103F\u1050-\u1055\u105A-\u105D\u1061\u1065\u1066\u106E-\u1070\u1075-\u1081]|[\u108E\u10A0-\u10C5\u10C7\u10CD\u10D0-\u10FA\u10FC-\u1248\u124A-\u124D]|[\u1250-\u1256\u1258\u125A-\u125D\u1260-\u1288\u128A-\u128D\u1290-\u12B0]|[\u12B2-\u12B5\u12B8-\u12BE\u12C0\u12C2-\u12C5\u12C8-\u12D6\u12D8-\u1310]|[\u1312-\u1315\u1318-\u135A\u1380-\u138F\u13A0-\u13F4\u1401-\u166C]|[\u166F-\u167F\u1681-\u169A\u16A0-\u16EA\u1700-\u170C\u170E-\u1711]|[\u1720-\u1731\u1740-\u1751\u1760-\u176C\u176E-\u1770\u1780-\u17B3\u17D7]|[\u17DC\u1820-\u1877\u1880-\u18A8\u18AA\u18B0-\u18F5\u1900-\u191C]|[\u1950-\u196D\u1970-\u1974\u1980-\u19AB\u19C1-\u19C7\u1A00-\u1A16]|[\u1A20-\u1A54\u1AA7\u1B05-\u1B33\u1B45-\u1B4B\u1B83-\u1BA0\u1BAE\u1BAF]|[\u1BBA-\u1BE5\u1C00-\u1C23\u1C4D-\u1C4F\u1C5A-\u1C7D\u1CE9-\u1CEC]|[\u1CEE-\u1CF1\u1CF5\u1CF6\u1D00-\u1DBF\u1E00-\u1F15\u1F18-\u1F1D]|[\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D]|[\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3]|[\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2071\u207F]|[\u2090-\u209C\u2102\u2107\u210A-\u2113\u2115\u2119-\u211D\u2124\u2126\u2128]|[\u212A-\u212D\u212F-\u2139\u213C-\u213F\u2145-\u2149\u214E\u2183\u2184]|[\u2C00-\u2C2E\u2C30-\u2C5E\u2C60-\u2CE4\u2CEB-\u2CEE\u2CF2\u2CF3]|[\u2D00-\u2D25\u2D27\u2D2D\u2D30-\u2D67\u2D6F\u2D80-\u2D96\u2DA0-\u2DA6]|[\u2DA8-\u2DAE\u2DB0-\u2DB6\u2DB8-\u2DBE\u2DC0-\u2DC6\u2DC8-\u2DCE]|[\u2DD0-\u2DD6\u2DD8-\u2DDE\u2E2F\u3005\u3006\u3031-\u3035\u303B\u303C]|[\u3041-\u3096\u309D-\u309F\u30A1-\u30FA\u30FC-\u30FF\u3105-\u312D]|[\u3131-\u318E\u31A0-\u31BA\u31F0-\u31FF\u3400-\u4DB5\u4E00-\u9FCC]|[\uA000-\uA48C\uA4D0-\uA4FD\uA500-\uA60C\uA610-\uA61F\uA62A\uA62B]|[\uA640-\uA66E\uA67F-\uA697\uA6A0-\uA6E5\uA717-\uA71F\uA722-\uA788]|[\uA78B-\uA78E\uA790-\uA793\uA7A0-\uA7AA\uA7F8-\uA801\uA803-\uA805]|[\uA807-\uA80A\uA80C-\uA822\uA840-\uA873\uA882-\uA8B3\uA8F2-\uA8F7\uA8FB]|[\uA90A-\uA925\uA930-\uA946\uA960-\uA97C\uA984-\uA9B2\uA9CF\uAA00-\uAA28]|[\uAA40-\uAA42\uAA44-\uAA4B\uAA60-\uAA76\uAA7A\uAA80-\uAAAF\uAAB1\uAAB5]|[\uAAB6\uAAB9-\uAABD\uAAC0\uAAC2\uAADB-\uAADD\uAAE0-\uAAEA\uAAF2-\uAAF4]|[\uAB01-\uAB06\uAB09-\uAB0E\uAB11-\uAB16\uAB20-\uAB26\uAB28-\uAB2E]|[\uABC0-\uABE2\uAC00-\uD7A3\uD7B0-\uD7C6\uD7CB-\uD7FB\uF900-\uFA6D]|[\uFA70-\uFAD9\uFB00-\uFB06\uFB13-\uFB17\uFB1D\uFB1F-\uFB28\uFB2A-\uFB36]|[\uFB38-\uFB3C\uFB3E\uFB40\uFB41\uFB43\uFB44\uFB46-\uFBB1\uFBD3-\uFD3D]|[\uFD50-\uFD8F\uFD92-\uFDC7\uFDF0-\uFDFB\uFE70-\uFE74\uFE76-\uFEFC]|[\uFF21-\uFF3A\uFF41-\uFF5A\uFF66-\uFFBE\uFFC2-\uFFC7\uFFCA-\uFFCF]|[\uFFD2-\uFFD7\uFFDA-\uFFDC])/, /^(?:\s)/, /^(?:$)/],
-            conditions: { "string": { "rules": [10, 11], "inclusive": false }, "struct": { "rules": [5, 6, 7], "inclusive": false }, "INITIAL": { "rules": [0, 1, 2, 3, 4, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], "inclusive": true } }
-        };
-        return lexer;
-    })();
-    parser.lexer = lexer;
-    function Parser() {
-        this.yy = {};
-    }
-    Parser.prototype = parser;parser.Parser = Parser;
-    return new Parser();
+// return the number of states currently on the stack
+stateStackSize:function stateStackSize() {
+        return this.conditionStack.length;
+    },
+options: {},
+performAction: function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
+var YYSTATE=YY_START;
+switch($avoiding_name_collisions) {
+case 0:/* do nothing */
+break;
+case 1:return 6;
+break;
+case 2:/* skip whitespace */
+break;
+case 3:return 5;
+break;
+case 4: this.begin("struct"); /*console.log('Starting struct');*/return 17;
+break;
+case 5: /*console.log('Ending struct');*/this.popState(); return 19;
+break;
+case 6:/* nothing */
+break;
+case 7: /*console.log('lex-member: ' + yy_.yytext);*/  return "MEMBER";
+break;
+case 8:return 16;
+break;
+case 9:this.begin("string");
+break;
+case 10:this.popState();
+break;
+case 11:return "STR";
+break;
+case 12:return 27;
+break;
+case 13:return 27;
+break;
+case 14:return 29;
+break;
+case 15:return 29;
+break;
+case 16:return 28;
+break;
+case 17:return 26;
+break;
+case 18:return 30;
+break;
+case 19:return 31;
+break;
+case 20:return 13;
+break;
+case 21:return 43;
+break;
+case 22:return 'DOT';
+break;
+case 23:return 'PLUS';
+break;
+case 24:return 40;
+break;
+case 25:return 'EQUALS';
+break;
+case 26:return 'EQUALS';
+break;
+case 27:return 47;
+break;
+case 28:return 'PUNCTUATION';
+break;
+case 29:return 46;
+break;
+case 30:return 45;
+break;
+case 31:return 42;
+break;
+case 32:return 8;
+break;
+}
+},
+rules: [/^(?:%%[^\n]*)/,/^(?:\n+)/,/^(?:\s+)/,/^(?:classDiagram\b)/,/^(?:[\{])/,/^(?:\})/,/^(?:[\n])/,/^(?:[^\{\}\n]*)/,/^(?:class\b)/,/^(?:["])/,/^(?:["])/,/^(?:[^"]*)/,/^(?:\s*<\|)/,/^(?:\s*\|>)/,/^(?:\s*>)/,/^(?:\s*<)/,/^(?:\s*\*)/,/^(?:\s*o\b)/,/^(?:--)/,/^(?:\.\.)/,/^(?::[^#\n;]+)/,/^(?:-)/,/^(?:\.)/,/^(?:\+)/,/^(?:%)/,/^(?:=)/,/^(?:=)/,/^(?:[A-Za-z]+)/,/^(?:[!"#$%&'*+,-.`?\\_\/])/,/^(?:[0-9]+)/,/^(?:[\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6]|[\u00F8-\u02C1\u02C6-\u02D1\u02E0-\u02E4\u02EC\u02EE\u0370-\u0374\u0376\u0377]|[\u037A-\u037D\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03F5]|[\u03F7-\u0481\u048A-\u0527\u0531-\u0556\u0559\u0561-\u0587\u05D0-\u05EA]|[\u05F0-\u05F2\u0620-\u064A\u066E\u066F\u0671-\u06D3\u06D5\u06E5\u06E6\u06EE]|[\u06EF\u06FA-\u06FC\u06FF\u0710\u0712-\u072F\u074D-\u07A5\u07B1\u07CA-\u07EA]|[\u07F4\u07F5\u07FA\u0800-\u0815\u081A\u0824\u0828\u0840-\u0858\u08A0]|[\u08A2-\u08AC\u0904-\u0939\u093D\u0950\u0958-\u0961\u0971-\u0977]|[\u0979-\u097F\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2]|[\u09B6-\u09B9\u09BD\u09CE\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A]|[\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39]|[\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8]|[\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AD0\u0AE0\u0AE1\u0B05-\u0B0C]|[\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B35-\u0B39\u0B3D\u0B5C]|[\u0B5D\u0B5F-\u0B61\u0B71\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99]|[\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB9\u0BD0]|[\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3D]|[\u0C58\u0C59\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3]|[\u0CB5-\u0CB9\u0CBD\u0CDE\u0CE0\u0CE1\u0CF1\u0CF2\u0D05-\u0D0C\u0D0E-\u0D10]|[\u0D12-\u0D3A\u0D3D\u0D4E\u0D60\u0D61\u0D7A-\u0D7F\u0D85-\u0D96\u0D9A-\u0DB1]|[\u0DB3-\u0DBB\u0DBD\u0DC0-\u0DC6\u0E01-\u0E30\u0E32\u0E33\u0E40-\u0E46\u0E81]|[\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3]|[\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD-\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0EC6]|[\u0EDC-\u0EDF\u0F00\u0F40-\u0F47\u0F49-\u0F6C\u0F88-\u0F8C\u1000-\u102A]|[\u103F\u1050-\u1055\u105A-\u105D\u1061\u1065\u1066\u106E-\u1070\u1075-\u1081]|[\u108E\u10A0-\u10C5\u10C7\u10CD\u10D0-\u10FA\u10FC-\u1248\u124A-\u124D]|[\u1250-\u1256\u1258\u125A-\u125D\u1260-\u1288\u128A-\u128D\u1290-\u12B0]|[\u12B2-\u12B5\u12B8-\u12BE\u12C0\u12C2-\u12C5\u12C8-\u12D6\u12D8-\u1310]|[\u1312-\u1315\u1318-\u135A\u1380-\u138F\u13A0-\u13F4\u1401-\u166C]|[\u166F-\u167F\u1681-\u169A\u16A0-\u16EA\u1700-\u170C\u170E-\u1711]|[\u1720-\u1731\u1740-\u1751\u1760-\u176C\u176E-\u1770\u1780-\u17B3\u17D7]|[\u17DC\u1820-\u1877\u1880-\u18A8\u18AA\u18B0-\u18F5\u1900-\u191C]|[\u1950-\u196D\u1970-\u1974\u1980-\u19AB\u19C1-\u19C7\u1A00-\u1A16]|[\u1A20-\u1A54\u1AA7\u1B05-\u1B33\u1B45-\u1B4B\u1B83-\u1BA0\u1BAE\u1BAF]|[\u1BBA-\u1BE5\u1C00-\u1C23\u1C4D-\u1C4F\u1C5A-\u1C7D\u1CE9-\u1CEC]|[\u1CEE-\u1CF1\u1CF5\u1CF6\u1D00-\u1DBF\u1E00-\u1F15\u1F18-\u1F1D]|[\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D]|[\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3]|[\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2071\u207F]|[\u2090-\u209C\u2102\u2107\u210A-\u2113\u2115\u2119-\u211D\u2124\u2126\u2128]|[\u212A-\u212D\u212F-\u2139\u213C-\u213F\u2145-\u2149\u214E\u2183\u2184]|[\u2C00-\u2C2E\u2C30-\u2C5E\u2C60-\u2CE4\u2CEB-\u2CEE\u2CF2\u2CF3]|[\u2D00-\u2D25\u2D27\u2D2D\u2D30-\u2D67\u2D6F\u2D80-\u2D96\u2DA0-\u2DA6]|[\u2DA8-\u2DAE\u2DB0-\u2DB6\u2DB8-\u2DBE\u2DC0-\u2DC6\u2DC8-\u2DCE]|[\u2DD0-\u2DD6\u2DD8-\u2DDE\u2E2F\u3005\u3006\u3031-\u3035\u303B\u303C]|[\u3041-\u3096\u309D-\u309F\u30A1-\u30FA\u30FC-\u30FF\u3105-\u312D]|[\u3131-\u318E\u31A0-\u31BA\u31F0-\u31FF\u3400-\u4DB5\u4E00-\u9FCC]|[\uA000-\uA48C\uA4D0-\uA4FD\uA500-\uA60C\uA610-\uA61F\uA62A\uA62B]|[\uA640-\uA66E\uA67F-\uA697\uA6A0-\uA6E5\uA717-\uA71F\uA722-\uA788]|[\uA78B-\uA78E\uA790-\uA793\uA7A0-\uA7AA\uA7F8-\uA801\uA803-\uA805]|[\uA807-\uA80A\uA80C-\uA822\uA840-\uA873\uA882-\uA8B3\uA8F2-\uA8F7\uA8FB]|[\uA90A-\uA925\uA930-\uA946\uA960-\uA97C\uA984-\uA9B2\uA9CF\uAA00-\uAA28]|[\uAA40-\uAA42\uAA44-\uAA4B\uAA60-\uAA76\uAA7A\uAA80-\uAAAF\uAAB1\uAAB5]|[\uAAB6\uAAB9-\uAABD\uAAC0\uAAC2\uAADB-\uAADD\uAAE0-\uAAEA\uAAF2-\uAAF4]|[\uAB01-\uAB06\uAB09-\uAB0E\uAB11-\uAB16\uAB20-\uAB26\uAB28-\uAB2E]|[\uABC0-\uABE2\uAC00-\uD7A3\uD7B0-\uD7C6\uD7CB-\uD7FB\uF900-\uFA6D]|[\uFA70-\uFAD9\uFB00-\uFB06\uFB13-\uFB17\uFB1D\uFB1F-\uFB28\uFB2A-\uFB36]|[\uFB38-\uFB3C\uFB3E\uFB40\uFB41\uFB43\uFB44\uFB46-\uFBB1\uFBD3-\uFD3D]|[\uFD50-\uFD8F\uFD92-\uFDC7\uFDF0-\uFDFB\uFE70-\uFE74\uFE76-\uFEFC]|[\uFF21-\uFF3A\uFF41-\uFF5A\uFF66-\uFFBE\uFFC2-\uFFC7\uFFCA-\uFFCF]|[\uFFD2-\uFFD7\uFFDA-\uFFDC])/,/^(?:\s)/,/^(?:$)/],
+conditions: {"string":{"rules":[10,11],"inclusive":false},"struct":{"rules":[5,6,7],"inclusive":false},"INITIAL":{"rules":[0,1,2,3,4,8,9,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32],"inclusive":true}}
+});
+return lexer;
+})();
+parser.lexer = lexer;
+function Parser () {
+  this.yy = {};
+}
+Parser.prototype = parser;parser.Parser = Parser;
+return new Parser;
 })();
 
-if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
-    exports.parser = classDiagram;
-    exports.Parser = classDiagram.Parser;
-    exports.parse = function () {
-        return classDiagram.parse.apply(classDiagram, arguments);
-    };
-    exports.main = function commonjsMain(args) {
-        if (!args[1]) {
-            console.log('Usage: ' + args[0] + ' FILE');
-            process.exit(1);
-        }
-        var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
-        return exports.parser.parse(source);
-    };
-    if (typeof module !== 'undefined' && require.main === module) {
-        exports.main(process.argv.slice(1));
-    }
-}
 
-}).call(this,require('_process'))
-},{"_process":3,"fs":1,"path":2}],111:[function(require,module,exports){
+if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
+exports.parser = parser;
+exports.Parser = parser.Parser;
+exports.parse = function () { return parser.parse.apply(parser, arguments); };
+exports.main = function commonjsMain(args) {
+    if (!args[1]) {
+        console.log('Usage: '+args[0]+' FILE');
+        process.exit(1);
+    }
+    var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
+    return exports.parser.parse(source);
+};
+if (typeof module !== 'undefined' && require.main === module) {
+  exports.main(process.argv.slice(1));
+}
+}
+}).call(this,require("1YiZ5S"))
+},{"1YiZ5S":104,"fs":102,"path":103}],111:[function(require,module,exports){
 (function (global){
 /**
  * Created by knut on 15-01-14.
  */
-'use strict';
-
 var Logger = require('../../logger');
 var log = new Logger.Log();
 
 var message = '';
 var info = false;
 
-exports.setMessage = function (txt) {
-    log.debug('Setting message to: ' + txt);
+exports.setMessage = function(txt){
+    log.debug('Setting message to: '+txt);
     message = txt;
 };
 
-exports.getMessage = function () {
+exports.getMessage = function(){
     return message;
 };
 
-exports.setInfo = function (inf) {
+exports.setInfo = function(inf){
     info = inf;
 };
 
-exports.getInfo = function () {
+exports.getInfo = function(){
     return info;
 };
 
-exports.parseError = function (err, hash) {
-    global.mermaidAPI.parseError(err, hash);
+exports.parseError = function(err,hash){
+    global.mermaidAPI.parseError(err,hash);
 };
-
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../logger":126}],112:[function(require,module,exports){
+}).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../../logger":127}],112:[function(require,module,exports){
 /**
  * Created by knut on 14-12-11.
  */
-'use strict';
-
 var db = require('./exampleDb');
 var exampleParser = require('./parser/example.js');
 var d3 = require('../../d3');
@@ -32537,26 +33002,31 @@ exports.draw = function (txt, id, ver) {
     parser.parse(txt);
 
     // Fetch the default direction, use TD if none was found
-    var svg = d3.select('#' + id);
+    var svg = d3.select('#'+id);
 
     var g = svg.append('g');
 
-    g.append('text') // text label for the x axis
-    .attr('x', 100).attr('y', 40).attr('class', 'version').attr('font-size', '32px').style('text-anchor', 'middle').text('mermaid ' + ver);
+    g.append('text')      // text label for the x axis
+        .attr('x', 100)
+        .attr('y', 40)
+        .attr('class','version')
+        .attr('font-size','32px')
+        .style('text-anchor', 'middle')
+        .text('mermaid '+ ver);
 
     /*
     var box = exports.bounds.getBounds();
-      var height = box.stopy-box.starty+2*conf.diagramMarginY;
+
+    var height = box.stopy-box.starty+2*conf.diagramMarginY;
     var width  = box.stopx-box.startx+2*conf.diagramMarginX;*/
 
-    svg.attr('height', 100);
-    svg.attr('width', 400);
+    svg.attr('height',100);
+    svg.attr('width', 400 );
     //svg.attr('viewBox', '0 0 300 150');
 };
-
-},{"../../d3":107,"../../logger":126,"./exampleDb":111,"./parser/example.js":113}],113:[function(require,module,exports){
+},{"../../d3":107,"../../logger":127,"./exampleDb":111,"./parser/example.js":113}],113:[function(require,module,exports){
 (function (process){
-/* parser generated by jison 0.4.15 */
+/* parser generated by jison 0.4.16 */
 /*
   Returns a Parser object of the following structure:
 
@@ -32629,581 +33099,566 @@ exports.draw = function (txt, id, ver) {
     recoverable: (boolean: TRUE when the parser has a error recovery rule available for this particular error)
   }
 */
-"use strict";
+var parser = (function(){
+var o=function(k,v,o,l){for(o=o||{},l=k.length;l--;o[k[l]]=v);return o},$V0=[6,9,10,12];
+var parser = {trace: function trace() { },
+yy: {},
+symbols_: {"error":2,"start":3,"info":4,"document":5,"EOF":6,"line":7,"statement":8,"NL":9,"showInfo":10,"message":11,"say":12,"TXT":13,"$accept":0,"$end":1},
+terminals_: {2:"error",4:"info",6:"EOF",9:"NL",10:"showInfo",12:"say",13:"TXT"},
+productions_: [0,[3,3],[5,0],[5,2],[7,1],[7,1],[8,1],[8,1],[11,2]],
+performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
+/* this == yyval */
 
-var example = (function () {
-    var o = function o(k, v, _o, l) {
-        for (_o = _o || {}, l = k.length; l--; _o[k[l]] = v);return _o;
-    },
-        $V0 = [6, 9, 10, 12];
-    var parser = { trace: function trace() {},
-        yy: {},
-        symbols_: { "error": 2, "start": 3, "info": 4, "document": 5, "EOF": 6, "line": 7, "statement": 8, "NL": 9, "showInfo": 10, "message": 11, "say": 12, "TXT": 13, "$accept": 0, "$end": 1 },
-        terminals_: { 2: "error", 4: "info", 6: "EOF", 9: "NL", 10: "showInfo", 12: "say", 13: "TXT" },
-        productions_: [0, [3, 3], [5, 0], [5, 2], [7, 1], [7, 1], [8, 1], [8, 1], [11, 2]],
-        performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, /* action[1] */$$, /* vstack */_$ /* lstack */) {
-            /* this == yyval */
+var $0 = $$.length - 1;
+switch (yystate) {
+case 1:
+ return yy; 
+break;
+case 4:
+ 
+break;
+case 6:
+ yy.setInfo(true);  
+break;
+case 7:
+ yy.setMessage($$[$0]);  
+break;
+case 8:
+ this.$ = $$[$0-1].substring(1).trim().replace(/\\n/gm, "\n"); 
+break;
+}
+},
+table: [{3:1,4:[1,2]},{1:[3]},o($V0,[2,2],{5:3}),{6:[1,4],7:5,8:6,9:[1,7],10:[1,8],11:9,12:[1,10]},{1:[2,1]},o($V0,[2,3]),o($V0,[2,4]),o($V0,[2,5]),o($V0,[2,6]),o($V0,[2,7]),{13:[1,11]},o($V0,[2,8])],
+defaultActions: {4:[2,1]},
+parseError: function parseError(str, hash) {
+    if (hash.recoverable) {
+        this.trace(str);
+    } else {
+        function _parseError (msg, hash) {
+            this.message = msg;
+            this.hash = hash;
+        }
+        _parseError.prototype = new Error();
 
-            var $0 = $$.length - 1;
-            switch (yystate) {
-                case 1:
-                    return yy;
-                    break;
-                case 4:
-
-                    break;
-                case 6:
-                    yy.setInfo(true);
-                    break;
-                case 7:
-                    yy.setMessage($$[$0]);
-                    break;
-                case 8:
-                    this.$ = $$[$0 - 1].substring(1).trim().replace(/\\n/gm, "\n");
-                    break;
+        throw new _parseError(str, hash);
+    }
+},
+parse: function parse(input) {
+    var self = this, stack = [0], tstack = [], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, recovering = 0, TERROR = 2, EOF = 1;
+    var args = lstack.slice.call(arguments, 1);
+    var lexer = Object.create(this.lexer);
+    var sharedState = { yy: {} };
+    for (var k in this.yy) {
+        if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
+            sharedState.yy[k] = this.yy[k];
+        }
+    }
+    lexer.setInput(input, sharedState.yy);
+    sharedState.yy.lexer = lexer;
+    sharedState.yy.parser = this;
+    if (typeof lexer.yylloc == 'undefined') {
+        lexer.yylloc = {};
+    }
+    var yyloc = lexer.yylloc;
+    lstack.push(yyloc);
+    var ranges = lexer.options && lexer.options.ranges;
+    if (typeof sharedState.yy.parseError === 'function') {
+        this.parseError = sharedState.yy.parseError;
+    } else {
+        this.parseError = Object.getPrototypeOf(this).parseError;
+    }
+    function popStack(n) {
+        stack.length = stack.length - 2 * n;
+        vstack.length = vstack.length - n;
+        lstack.length = lstack.length - n;
+    }
+    _token_stack:
+        var lex = function () {
+            var token;
+            token = lexer.lex() || EOF;
+            if (typeof token !== 'number') {
+                token = self.symbols_[token] || token;
             }
-        },
-        table: [{ 3: 1, 4: [1, 2] }, { 1: [3] }, o($V0, [2, 2], { 5: 3 }), { 6: [1, 4], 7: 5, 8: 6, 9: [1, 7], 10: [1, 8], 11: 9, 12: [1, 10] }, { 1: [2, 1] }, o($V0, [2, 3]), o($V0, [2, 4]), o($V0, [2, 5]), o($V0, [2, 6]), o($V0, [2, 7]), { 13: [1, 11] }, o($V0, [2, 8])],
-        defaultActions: { 4: [2, 1] },
-        parseError: function parseError(str, hash) {
-            if (hash.recoverable) {
-                this.trace(str);
-            } else {
-                var _parseError = function _parseError(msg, hash) {
-                    this.message = msg;
-                    this.hash = hash;
-                };
-
-                _parseError.prototype = new Error();
-
-                throw new _parseError(str, hash);
+            return token;
+        };
+    var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
+    while (true) {
+        state = stack[stack.length - 1];
+        if (this.defaultActions[state]) {
+            action = this.defaultActions[state];
+        } else {
+            if (symbol === null || typeof symbol == 'undefined') {
+                symbol = lex();
             }
-        },
-        parse: function parse(input) {
-            var self = this,
-                stack = [0],
-                tstack = [],
-                vstack = [null],
-                lstack = [],
-                table = this.table,
-                yytext = '',
-                yylineno = 0,
-                yyleng = 0,
-                recovering = 0,
-                TERROR = 2,
-                EOF = 1;
-            var args = lstack.slice.call(arguments, 1);
-            var lexer = Object.create(this.lexer);
-            var sharedState = { yy: {} };
-            for (var k in this.yy) {
-                if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
-                    sharedState.yy[k] = this.yy[k];
+            action = table[state] && table[state][symbol];
+        }
+                    if (typeof action === 'undefined' || !action.length || !action[0]) {
+                var errStr = '';
+                expected = [];
+                for (p in table[state]) {
+                    if (this.terminals_[p] && p > TERROR) {
+                        expected.push('\'' + this.terminals_[p] + '\'');
+                    }
                 }
-            }
-            lexer.setInput(input, sharedState.yy);
-            sharedState.yy.lexer = lexer;
-            sharedState.yy.parser = this;
-            if (typeof lexer.yylloc == 'undefined') {
-                lexer.yylloc = {};
-            }
-            var yyloc = lexer.yylloc;
-            lstack.push(yyloc);
-            var ranges = lexer.options && lexer.options.ranges;
-            if (typeof sharedState.yy.parseError === 'function') {
-                this.parseError = sharedState.yy.parseError;
-            } else {
-                this.parseError = Object.getPrototypeOf(this).parseError;
-            }
-            function popStack(n) {
-                stack.length = stack.length - 2 * n;
-                vstack.length = vstack.length - n;
-                lstack.length = lstack.length - n;
-            }
-            _token_stack: var lex = function lex() {
-                var token;
-                token = lexer.lex() || EOF;
-                if (typeof token !== 'number') {
-                    token = self.symbols_[token] || token;
+                if (lexer.showPosition) {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
+                } else {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
                 }
-                return token;
+                this.parseError(errStr, {
+                    text: lexer.match,
+                    token: this.terminals_[symbol] || symbol,
+                    line: lexer.yylineno,
+                    loc: yyloc,
+                    expected: expected
+                });
+            }
+        if (action[0] instanceof Array && action.length > 1) {
+            throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
+        }
+        switch (action[0]) {
+        case 1:
+            stack.push(symbol);
+            vstack.push(lexer.yytext);
+            lstack.push(lexer.yylloc);
+            stack.push(action[1]);
+            symbol = null;
+            if (!preErrorSymbol) {
+                yyleng = lexer.yyleng;
+                yytext = lexer.yytext;
+                yylineno = lexer.yylineno;
+                yyloc = lexer.yylloc;
+                if (recovering > 0) {
+                    recovering--;
+                }
+            } else {
+                symbol = preErrorSymbol;
+                preErrorSymbol = null;
+            }
+            break;
+        case 2:
+            len = this.productions_[action[1]][1];
+            yyval.$ = vstack[vstack.length - len];
+            yyval._$ = {
+                first_line: lstack[lstack.length - (len || 1)].first_line,
+                last_line: lstack[lstack.length - 1].last_line,
+                first_column: lstack[lstack.length - (len || 1)].first_column,
+                last_column: lstack[lstack.length - 1].last_column
             };
-            var symbol,
-                preErrorSymbol,
-                state,
-                action,
-                a,
-                r,
-                yyval = {},
-                p,
-                len,
-                newState,
-                expected;
-            while (true) {
-                state = stack[stack.length - 1];
-                if (this.defaultActions[state]) {
-                    action = this.defaultActions[state];
-                } else {
-                    if (symbol === null || typeof symbol == 'undefined') {
-                        symbol = lex();
-                    }
-                    action = table[state] && table[state][symbol];
-                }
-                if (typeof action === 'undefined' || !action.length || !action[0]) {
-                    var errStr = '';
-                    expected = [];
-                    for (p in table[state]) {
-                        if (this.terminals_[p] && p > TERROR) {
-                            expected.push('\'' + this.terminals_[p] + '\'');
-                        }
-                    }
-                    if (lexer.showPosition) {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
-                    } else {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
-                    }
-                    this.parseError(errStr, {
-                        text: lexer.match,
-                        token: this.terminals_[symbol] || symbol,
-                        line: lexer.yylineno,
-                        loc: yyloc,
-                        expected: expected
-                    });
-                }
-                if (action[0] instanceof Array && action.length > 1) {
-                    throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
-                }
-                switch (action[0]) {
-                    case 1:
-                        stack.push(symbol);
-                        vstack.push(lexer.yytext);
-                        lstack.push(lexer.yylloc);
-                        stack.push(action[1]);
-                        symbol = null;
-                        if (!preErrorSymbol) {
-                            yyleng = lexer.yyleng;
-                            yytext = lexer.yytext;
-                            yylineno = lexer.yylineno;
-                            yyloc = lexer.yylloc;
-                            if (recovering > 0) {
-                                recovering--;
-                            }
-                        } else {
-                            symbol = preErrorSymbol;
-                            preErrorSymbol = null;
-                        }
-                        break;
-                    case 2:
-                        len = this.productions_[action[1]][1];
-                        yyval.$ = vstack[vstack.length - len];
-                        yyval._$ = {
-                            first_line: lstack[lstack.length - (len || 1)].first_line,
-                            last_line: lstack[lstack.length - 1].last_line,
-                            first_column: lstack[lstack.length - (len || 1)].first_column,
-                            last_column: lstack[lstack.length - 1].last_column
-                        };
-                        if (ranges) {
-                            yyval._$.range = [lstack[lstack.length - (len || 1)].range[0], lstack[lstack.length - 1].range[1]];
-                        }
-                        r = this.performAction.apply(yyval, [yytext, yyleng, yylineno, sharedState.yy, action[1], vstack, lstack].concat(args));
-                        if (typeof r !== 'undefined') {
-                            return r;
-                        }
-                        if (len) {
-                            stack = stack.slice(0, -1 * len * 2);
-                            vstack = vstack.slice(0, -1 * len);
-                            lstack = lstack.slice(0, -1 * len);
-                        }
-                        stack.push(this.productions_[action[1]][0]);
-                        vstack.push(yyval.$);
-                        lstack.push(yyval._$);
-                        newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
-                        stack.push(newState);
-                        break;
-                    case 3:
-                        return true;
-                }
+            if (ranges) {
+                yyval._$.range = [
+                    lstack[lstack.length - (len || 1)].range[0],
+                    lstack[lstack.length - 1].range[1]
+                ];
             }
+            r = this.performAction.apply(yyval, [
+                yytext,
+                yyleng,
+                yylineno,
+                sharedState.yy,
+                action[1],
+                vstack,
+                lstack
+            ].concat(args));
+            if (typeof r !== 'undefined') {
+                return r;
+            }
+            if (len) {
+                stack = stack.slice(0, -1 * len * 2);
+                vstack = vstack.slice(0, -1 * len);
+                lstack = lstack.slice(0, -1 * len);
+            }
+            stack.push(this.productions_[action[1]][0]);
+            vstack.push(yyval.$);
+            lstack.push(yyval._$);
+            newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
+            stack.push(newState);
+            break;
+        case 3:
             return true;
-        } };
-    /* generated by jison-lex 0.3.4 */
-    var lexer = (function () {
-        var lexer = {
+        }
+    }
+    return true;
+}};
+/* generated by jison-lex 0.3.4 */
+var lexer = (function(){
+var lexer = ({
 
-            EOF: 1,
+EOF:1,
 
-            parseError: function parseError(str, hash) {
-                if (this.yy.parser) {
-                    this.yy.parser.parseError(str, hash);
-                } else {
-                    throw new Error(str);
-                }
-            },
+parseError:function parseError(str, hash) {
+        if (this.yy.parser) {
+            this.yy.parser.parseError(str, hash);
+        } else {
+            throw new Error(str);
+        }
+    },
 
-            // resets the lexer, sets new input
-            setInput: function setInput(input, yy) {
-                this.yy = yy || this.yy || {};
-                this._input = input;
-                this._more = this._backtrack = this.done = false;
-                this.yylineno = this.yyleng = 0;
-                this.yytext = this.matched = this.match = '';
-                this.conditionStack = ['INITIAL'];
-                this.yylloc = {
-                    first_line: 1,
-                    first_column: 0,
-                    last_line: 1,
-                    last_column: 0
-                };
-                if (this.options.ranges) {
-                    this.yylloc.range = [0, 0];
-                }
-                this.offset = 0;
-                return this;
-            },
+// resets the lexer, sets new input
+setInput:function (input, yy) {
+        this.yy = yy || this.yy || {};
+        this._input = input;
+        this._more = this._backtrack = this.done = false;
+        this.yylineno = this.yyleng = 0;
+        this.yytext = this.matched = this.match = '';
+        this.conditionStack = ['INITIAL'];
+        this.yylloc = {
+            first_line: 1,
+            first_column: 0,
+            last_line: 1,
+            last_column: 0
+        };
+        if (this.options.ranges) {
+            this.yylloc.range = [0,0];
+        }
+        this.offset = 0;
+        return this;
+    },
 
-            // consumes and returns one char from the input
-            input: function input() {
-                var ch = this._input[0];
-                this.yytext += ch;
-                this.yyleng++;
-                this.offset++;
-                this.match += ch;
-                this.matched += ch;
-                var lines = ch.match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno++;
-                    this.yylloc.last_line++;
-                } else {
-                    this.yylloc.last_column++;
-                }
-                if (this.options.ranges) {
-                    this.yylloc.range[1]++;
-                }
+// consumes and returns one char from the input
+input:function () {
+        var ch = this._input[0];
+        this.yytext += ch;
+        this.yyleng++;
+        this.offset++;
+        this.match += ch;
+        this.matched += ch;
+        var lines = ch.match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno++;
+            this.yylloc.last_line++;
+        } else {
+            this.yylloc.last_column++;
+        }
+        if (this.options.ranges) {
+            this.yylloc.range[1]++;
+        }
 
-                this._input = this._input.slice(1);
-                return ch;
-            },
+        this._input = this._input.slice(1);
+        return ch;
+    },
 
-            // unshifts one char (or a string) into the input
-            unput: function unput(ch) {
-                var len = ch.length;
-                var lines = ch.split(/(?:\r\n?|\n)/g);
+// unshifts one char (or a string) into the input
+unput:function (ch) {
+        var len = ch.length;
+        var lines = ch.split(/(?:\r\n?|\n)/g);
 
-                this._input = ch + this._input;
-                this.yytext = this.yytext.substr(0, this.yytext.length - len);
-                //this.yyleng -= len;
-                this.offset -= len;
-                var oldLines = this.match.split(/(?:\r\n?|\n)/g);
-                this.match = this.match.substr(0, this.match.length - 1);
-                this.matched = this.matched.substr(0, this.matched.length - 1);
+        this._input = ch + this._input;
+        this.yytext = this.yytext.substr(0, this.yytext.length - len);
+        //this.yyleng -= len;
+        this.offset -= len;
+        var oldLines = this.match.split(/(?:\r\n?|\n)/g);
+        this.match = this.match.substr(0, this.match.length - 1);
+        this.matched = this.matched.substr(0, this.matched.length - 1);
 
-                if (lines.length - 1) {
-                    this.yylineno -= lines.length - 1;
-                }
-                var r = this.yylloc.range;
+        if (lines.length - 1) {
+            this.yylineno -= lines.length - 1;
+        }
+        var r = this.yylloc.range;
 
-                this.yylloc = {
+        this.yylloc = {
+            first_line: this.yylloc.first_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.first_column,
+            last_column: lines ?
+                (lines.length === oldLines.length ? this.yylloc.first_column : 0)
+                 + oldLines[oldLines.length - lines.length].length - lines[0].length :
+              this.yylloc.first_column - len
+        };
+
+        if (this.options.ranges) {
+            this.yylloc.range = [r[0], r[0] + this.yyleng - len];
+        }
+        this.yyleng = this.yytext.length;
+        return this;
+    },
+
+// When called from action, caches matched text and appends it on next action
+more:function () {
+        this._more = true;
+        return this;
+    },
+
+// When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
+reject:function () {
+        if (this.options.backtrack_lexer) {
+            this._backtrack = true;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+
+        }
+        return this;
+    },
+
+// retain first n characters of the match
+less:function (n) {
+        this.unput(this.match.slice(n));
+    },
+
+// displays already matched input, i.e. for error messages
+pastInput:function () {
+        var past = this.matched.substr(0, this.matched.length - this.match.length);
+        return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
+    },
+
+// displays upcoming input, i.e. for error messages
+upcomingInput:function () {
+        var next = this.match;
+        if (next.length < 20) {
+            next += this._input.substr(0, 20-next.length);
+        }
+        return (next.substr(0,20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
+    },
+
+// displays the character position where the lexing error occurred, i.e. for error messages
+showPosition:function () {
+        var pre = this.pastInput();
+        var c = new Array(pre.length + 1).join("-");
+        return pre + this.upcomingInput() + "\n" + c + "^";
+    },
+
+// test the lexed token: return FALSE when not a match, otherwise return token
+test_match:function (match, indexed_rule) {
+        var token,
+            lines,
+            backup;
+
+        if (this.options.backtrack_lexer) {
+            // save context
+            backup = {
+                yylineno: this.yylineno,
+                yylloc: {
                     first_line: this.yylloc.first_line,
-                    last_line: this.yylineno + 1,
+                    last_line: this.last_line,
                     first_column: this.yylloc.first_column,
-                    last_column: lines ? (lines.length === oldLines.length ? this.yylloc.first_column : 0) + oldLines[oldLines.length - lines.length].length - lines[0].length : this.yylloc.first_column - len
-                };
+                    last_column: this.yylloc.last_column
+                },
+                yytext: this.yytext,
+                match: this.match,
+                matches: this.matches,
+                matched: this.matched,
+                yyleng: this.yyleng,
+                offset: this.offset,
+                _more: this._more,
+                _input: this._input,
+                yy: this.yy,
+                conditionStack: this.conditionStack.slice(0),
+                done: this.done
+            };
+            if (this.options.ranges) {
+                backup.yylloc.range = this.yylloc.range.slice(0);
+            }
+        }
 
-                if (this.options.ranges) {
-                    this.yylloc.range = [r[0], r[0] + this.yyleng - len];
-                }
-                this.yyleng = this.yytext.length;
-                return this;
-            },
+        lines = match[0].match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno += lines.length;
+        }
+        this.yylloc = {
+            first_line: this.yylloc.last_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.last_column,
+            last_column: lines ?
+                         lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length :
+                         this.yylloc.last_column + match[0].length
+        };
+        this.yytext += match[0];
+        this.match += match[0];
+        this.matches = match;
+        this.yyleng = this.yytext.length;
+        if (this.options.ranges) {
+            this.yylloc.range = [this.offset, this.offset += this.yyleng];
+        }
+        this._more = false;
+        this._backtrack = false;
+        this._input = this._input.slice(match[0].length);
+        this.matched += match[0];
+        token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
+        if (this.done && this._input) {
+            this.done = false;
+        }
+        if (token) {
+            return token;
+        } else if (this._backtrack) {
+            // recover context
+            for (var k in backup) {
+                this[k] = backup[k];
+            }
+            return false; // rule action called reject() implying the next rule should be tested instead.
+        }
+        return false;
+    },
 
-            // When called from action, caches matched text and appends it on next action
-            more: function more() {
-                this._more = true;
-                return this;
-            },
+// return next match in input
+next:function () {
+        if (this.done) {
+            return this.EOF;
+        }
+        if (!this._input) {
+            this.done = true;
+        }
 
-            // When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
-            reject: function reject() {
+        var token,
+            match,
+            tempMatch,
+            index;
+        if (!this._more) {
+            this.yytext = '';
+            this.match = '';
+        }
+        var rules = this._currentRules();
+        for (var i = 0; i < rules.length; i++) {
+            tempMatch = this._input.match(this.rules[rules[i]]);
+            if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
+                match = tempMatch;
+                index = i;
                 if (this.options.backtrack_lexer) {
-                    this._backtrack = true;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-                return this;
-            },
-
-            // retain first n characters of the match
-            less: function less(n) {
-                this.unput(this.match.slice(n));
-            },
-
-            // displays already matched input, i.e. for error messages
-            pastInput: function pastInput() {
-                var past = this.matched.substr(0, this.matched.length - this.match.length);
-                return (past.length > 20 ? '...' : '') + past.substr(-20).replace(/\n/g, "");
-            },
-
-            // displays upcoming input, i.e. for error messages
-            upcomingInput: function upcomingInput() {
-                var next = this.match;
-                if (next.length < 20) {
-                    next += this._input.substr(0, 20 - next.length);
-                }
-                return (next.substr(0, 20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
-            },
-
-            // displays the character position where the lexing error occurred, i.e. for error messages
-            showPosition: function showPosition() {
-                var pre = this.pastInput();
-                var c = new Array(pre.length + 1).join("-");
-                return pre + this.upcomingInput() + "\n" + c + "^";
-            },
-
-            // test the lexed token: return FALSE when not a match, otherwise return token
-            test_match: function test_match(match, indexed_rule) {
-                var token, lines, backup;
-
-                if (this.options.backtrack_lexer) {
-                    // save context
-                    backup = {
-                        yylineno: this.yylineno,
-                        yylloc: {
-                            first_line: this.yylloc.first_line,
-                            last_line: this.last_line,
-                            first_column: this.yylloc.first_column,
-                            last_column: this.yylloc.last_column
-                        },
-                        yytext: this.yytext,
-                        match: this.match,
-                        matches: this.matches,
-                        matched: this.matched,
-                        yyleng: this.yyleng,
-                        offset: this.offset,
-                        _more: this._more,
-                        _input: this._input,
-                        yy: this.yy,
-                        conditionStack: this.conditionStack.slice(0),
-                        done: this.done
-                    };
-                    if (this.options.ranges) {
-                        backup.yylloc.range = this.yylloc.range.slice(0);
-                    }
-                }
-
-                lines = match[0].match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno += lines.length;
-                }
-                this.yylloc = {
-                    first_line: this.yylloc.last_line,
-                    last_line: this.yylineno + 1,
-                    first_column: this.yylloc.last_column,
-                    last_column: lines ? lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length : this.yylloc.last_column + match[0].length
-                };
-                this.yytext += match[0];
-                this.match += match[0];
-                this.matches = match;
-                this.yyleng = this.yytext.length;
-                if (this.options.ranges) {
-                    this.yylloc.range = [this.offset, this.offset += this.yyleng];
-                }
-                this._more = false;
-                this._backtrack = false;
-                this._input = this._input.slice(match[0].length);
-                this.matched += match[0];
-                token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
-                if (this.done && this._input) {
-                    this.done = false;
-                }
-                if (token) {
-                    return token;
-                } else if (this._backtrack) {
-                    // recover context
-                    for (var k in backup) {
-                        this[k] = backup[k];
-                    }
-                    return false; // rule action called reject() implying the next rule should be tested instead.
-                }
-                return false;
-            },
-
-            // return next match in input
-            next: function next() {
-                if (this.done) {
-                    return this.EOF;
-                }
-                if (!this._input) {
-                    this.done = true;
-                }
-
-                var token, match, tempMatch, index;
-                if (!this._more) {
-                    this.yytext = '';
-                    this.match = '';
-                }
-                var rules = this._currentRules();
-                for (var i = 0; i < rules.length; i++) {
-                    tempMatch = this._input.match(this.rules[rules[i]]);
-                    if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
-                        match = tempMatch;
-                        index = i;
-                        if (this.options.backtrack_lexer) {
-                            token = this.test_match(tempMatch, rules[i]);
-                            if (token !== false) {
-                                return token;
-                            } else if (this._backtrack) {
-                                match = false;
-                                continue; // rule action called reject() implying a rule MISmatch.
-                            } else {
-                                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                                    return false;
-                                }
-                        } else if (!this.options.flex) {
-                            break;
-                        }
-                    }
-                }
-                if (match) {
-                    token = this.test_match(match, rules[index]);
+                    token = this.test_match(tempMatch, rules[i]);
                     if (token !== false) {
                         return token;
+                    } else if (this._backtrack) {
+                        match = false;
+                        continue; // rule action called reject() implying a rule MISmatch.
+                    } else {
+                        // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+                        return false;
                     }
-                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                    return false;
+                } else if (!this.options.flex) {
+                    break;
                 }
-                if (this._input === "") {
-                    return this.EOF;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-            },
+            }
+        }
+        if (match) {
+            token = this.test_match(match, rules[index]);
+            if (token !== false) {
+                return token;
+            }
+            // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+            return false;
+        }
+        if (this._input === "") {
+            return this.EOF;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+        }
+    },
 
-            // return next match that has a token
-            lex: function lex() {
-                var r = this.next();
-                if (r) {
-                    return r;
-                } else {
-                    return this.lex();
-                }
-            },
+// return next match that has a token
+lex:function lex() {
+        var r = this.next();
+        if (r) {
+            return r;
+        } else {
+            return this.lex();
+        }
+    },
 
-            // activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
-            begin: function begin(condition) {
-                this.conditionStack.push(condition);
-            },
+// activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
+begin:function begin(condition) {
+        this.conditionStack.push(condition);
+    },
 
-            // pop the previously active lexer condition state off the condition stack
-            popState: function popState() {
-                var n = this.conditionStack.length - 1;
-                if (n > 0) {
-                    return this.conditionStack.pop();
-                } else {
-                    return this.conditionStack[0];
-                }
-            },
+// pop the previously active lexer condition state off the condition stack
+popState:function popState() {
+        var n = this.conditionStack.length - 1;
+        if (n > 0) {
+            return this.conditionStack.pop();
+        } else {
+            return this.conditionStack[0];
+        }
+    },
 
-            // produce the lexer rule set which is active for the currently active lexer condition state
-            _currentRules: function _currentRules() {
-                if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
-                    return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
-                } else {
-                    return this.conditions["INITIAL"].rules;
-                }
-            },
+// produce the lexer rule set which is active for the currently active lexer condition state
+_currentRules:function _currentRules() {
+        if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
+            return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
+        } else {
+            return this.conditions["INITIAL"].rules;
+        }
+    },
 
-            // return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
-            topState: function topState(n) {
-                n = this.conditionStack.length - 1 - Math.abs(n || 0);
-                if (n >= 0) {
-                    return this.conditionStack[n];
-                } else {
-                    return "INITIAL";
-                }
-            },
+// return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
+topState:function topState(n) {
+        n = this.conditionStack.length - 1 - Math.abs(n || 0);
+        if (n >= 0) {
+            return this.conditionStack[n];
+        } else {
+            return "INITIAL";
+        }
+    },
 
-            // alias for begin(condition)
-            pushState: function pushState(condition) {
-                this.begin(condition);
-            },
+// alias for begin(condition)
+pushState:function pushState(condition) {
+        this.begin(condition);
+    },
 
-            // return the number of states currently on the stack
-            stateStackSize: function stateStackSize() {
-                return this.conditionStack.length;
-            },
-            options: { "case-insensitive": true },
-            performAction: function anonymous(yy, yy_, $avoiding_name_collisions, YY_START) {
-                // Pre-lexer code can go here
+// return the number of states currently on the stack
+stateStackSize:function stateStackSize() {
+        return this.conditionStack.length;
+    },
+options: {"case-insensitive":true},
+performAction: function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
+	// Pre-lexer code can go here
 
-                var YYSTATE = YY_START;
-                switch ($avoiding_name_collisions) {
-                    case 0:
-                        return 9;
-                        break;
-                    case 1:
-                        return 10;
-                        break;
-                    case 2:
-                        return 4;
-                        break;
-                    case 3:
-                        return 12;
-                        break;
-                    case 4:
-                        return 13;
-                        break;
-                    case 5:
-                        return 6;
-                        break;
-                    case 6:
-                        return 'INVALID';
-                        break;
-                }
-            },
-            rules: [/^(?:[\n]+)/i, /^(?:showInfo\b)/i, /^(?:info\b)/i, /^(?:say\b)/i, /^(?::[^#\n;]+)/i, /^(?:$)/i, /^(?:.)/i],
-            conditions: { "INITIAL": { "rules": [0, 1, 2, 3, 4, 5, 6], "inclusive": true } }
-        };
-        return lexer;
-    })();
-    parser.lexer = lexer;
-    function Parser() {
-        this.yy = {};
-    }
-    Parser.prototype = parser;parser.Parser = Parser;
-    return new Parser();
+var YYSTATE=YY_START;
+switch($avoiding_name_collisions) {
+case 0:return 9;
+break;
+case 1:return 10;
+break;
+case 2:return 4;
+break;
+case 3:return 12;
+break;
+case 4:return 13;
+break;
+case 5:return 6;
+break;
+case 6:return 'INVALID';
+break;
+}
+},
+rules: [/^(?:[\n]+)/i,/^(?:showInfo\b)/i,/^(?:info\b)/i,/^(?:say\b)/i,/^(?::[^#\n;]+)/i,/^(?:$)/i,/^(?:.)/i],
+conditions: {"INITIAL":{"rules":[0,1,2,3,4,5,6],"inclusive":true}}
+});
+return lexer;
+})();
+parser.lexer = lexer;
+function Parser () {
+  this.yy = {};
+}
+Parser.prototype = parser;parser.Parser = Parser;
+return new Parser;
 })();
 
+
 if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
-    exports.parser = example;
-    exports.Parser = example.Parser;
-    exports.parse = function () {
-        return example.parse.apply(example, arguments);
-    };
-    exports.main = function commonjsMain(args) {
-        if (!args[1]) {
-            console.log('Usage: ' + args[0] + ' FILE');
-            process.exit(1);
-        }
-        var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
-        return exports.parser.parse(source);
-    };
-    if (typeof module !== 'undefined' && require.main === module) {
-        exports.main(process.argv.slice(1));
+exports.parser = parser;
+exports.Parser = parser.Parser;
+exports.parse = function () { return parser.parse.apply(parser, arguments); };
+exports.main = function commonjsMain(args) {
+    if (!args[1]) {
+        console.log('Usage: '+args[0]+' FILE');
+        process.exit(1);
     }
+    var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
+    return exports.parser.parse(source);
+};
+if (typeof module !== 'undefined' && require.main === module) {
+  exports.main(process.argv.slice(1));
 }
-
-}).call(this,require('_process'))
-},{"_process":3,"fs":1,"path":2}],114:[function(require,module,exports){
+}
+}).call(this,require("1YiZ5S"))
+},{"1YiZ5S":104,"fs":102,"path":103}],114:[function(require,module,exports){
 /* global window */
-'use strict';
-
 var Logger = require('../../logger');
 var log = new Logger.Log();
 
@@ -33212,10 +33667,8 @@ var dagreD3;
 if (require) {
   try {
     dagreD3 = require('dagre-d3');
-    //log.debug('Got it (dagre-d3)');
-  } catch (e) {
-    log.debug('Could not load dagre-d3');
-  }
+      //log.debug('Got it (dagre-d3)');
+  } catch (e) {log.debug('Could not load dagre-d3');}
 }
 
 if (!dagreD3) {
@@ -33224,12 +33677,10 @@ if (!dagreD3) {
 
 module.exports = dagreD3;
 
-},{"../../logger":126,"dagre-d3":5}],115:[function(require,module,exports){
+},{"../../logger":127,"dagre-d3":2}],115:[function(require,module,exports){
 /**
  * Created by knut on 14-12-11.
  */
-'use strict';
-
 var graph = require('./graphDb');
 var flow = require('./parser/flow');
 var dot = require('./parser/dot');
@@ -33238,11 +33689,13 @@ var dagreD3 = require('./dagre-d3');
 var Logger = require('../../logger');
 var log = new Logger.Log();
 
-var conf = {};
-module.exports.setConf = function (cnf) {
+
+var conf = {
+};
+module.exports.setConf = function(cnf){
     var keys = Object.keys(cnf);
     var i;
-    for (i = 0; i < keys.length; i++) {
+    for(i=0;i<keys.length;i++){
         conf[keys[i]] = cnf[keys[i]];
     }
 };
@@ -33255,7 +33708,7 @@ module.exports.setConf = function (cnf) {
 exports.addVertices = function (vert, g) {
     var keys = Object.keys(vert);
 
-    var styleFromStyleArr = function styleFromStyleArr(styleStr, arr) {
+    var styleFromStyleArr = function(styleStr,arr){
         var i;
         // Create a compound style definition from the style definitions found for the node in the graph definition
         for (i = 0; i < arr.length; i++) {
@@ -33280,7 +33733,7 @@ exports.addVertices = function (vert, g) {
 
         //log.debug(vertice.classes);
 
-        if (vertice.classes.length > 0) {
+        if(vertice.classes.length >0){
             classStr = vertice.classes.join(' ');
         }
 
@@ -33295,16 +33748,20 @@ exports.addVertices = function (vert, g) {
         // Use vertice id as text in the box if no text is provided by the graph definition
         if (typeof vertice.text === 'undefined') {
             verticeText = vertice.id;
-        } else {
+        }
+        else {
             verticeText = vertice.text;
         }
 
+
+
         var labelTypeStr = '';
-        if (conf.htmlLabels) {
+        if(conf.htmlLabels) {
             labelTypeStr = 'html';
-            verticeText = verticeText.replace(/fa:fa[\w\-]+/g, function (s) {
-                return '<i class="fa ' + s.substring(3) + '"></i>';
+            verticeText = verticeText.replace(/fa:fa[\w\-]+/g,function(s){
+                return '<i class="fa '+ s.substring(3)+'"></i>';
             });
+
         } else {
             verticeText = verticeText.replace(/<br>/g, '\n');
             labelTypeStr = 'text';
@@ -33314,7 +33771,7 @@ exports.addVertices = function (vert, g) {
         var _shape = '';
 
         // Set the shape based parameters
-        switch (vertice.type) {
+        switch(vertice.type){
             case 'round':
                 radious = 5;
                 _shape = 'rect';
@@ -33345,7 +33802,7 @@ exports.addVertices = function (vert, g) {
                 _shape = 'rect';
         }
         // Add the node
-        g.setNode(vertice.id, { labelType: labelTypeStr, shape: _shape, label: verticeText, rx: radious, ry: radious, 'class': classStr, style: style, id: vertice.id });
+        g.setNode(vertice.id, {labelType: labelTypeStr, shape:_shape, label: verticeText, rx: radious, ry: radious, 'class': classStr, style: style, id:vertice.id});
     });
 };
 
@@ -33355,35 +33812,39 @@ exports.addVertices = function (vert, g) {
  * @param {Object} g The graph object
  */
 exports.addEdges = function (edges, g) {
-    var cnt = 0;
+    var cnt=0;
     var aHead;
-
+    
     var defaultStyle;
-    if (typeof edges.defaultStyle !== 'undefined') {
-        defaultStyle = edges.defaultStyle.toString().replace(/,/g, ';');
+    if(typeof edges.defaultStyle !== 'undefined'){
+        defaultStyle = edges.defaultStyle.toString().replace(/,/g , ';');
+
     }
 
     edges.forEach(function (edge) {
         cnt++;
 
         // Set link type for rendering
-        if (edge.type === 'arrow_open') {
+        if(edge.type === 'arrow_open'){
             aHead = 'none';
-        } else {
+        }
+        else{
             aHead = 'normal';
         }
 
         var style = '';
 
-        if (typeof edge.style !== 'undefined') {
-            edge.style.forEach(function (s) {
-                style = style + s + ';';
+
+        if(typeof edge.style !== 'undefined'){
+            edge.style.forEach(function(s){
+                style = style + s +';';
             });
-        } else {
-            switch (edge.stroke) {
+        }
+        else{
+            switch(edge.stroke){
                 case 'normal':
                     style = 'fill:none';
-                    if (typeof defaultStyle !== 'undefined') {
+                    if(typeof defaultStyle !== 'undefined'){
                         style = defaultStyle;
                     }
                     break;
@@ -33398,29 +33859,29 @@ exports.addEdges = function (edges, g) {
 
         // Add the edge to the graph
         if (typeof edge.text === 'undefined') {
-            if (typeof edge.style === 'undefined') {
-                g.setEdge(edge.start, edge.end, { style: style, arrowhead: aHead }, cnt);
-            } else {
+            if(typeof edge.style === 'undefined'){
+                g.setEdge(edge.start, edge.end,{ style: style, arrowhead: aHead},cnt);
+            }else{
                 g.setEdge(edge.start, edge.end, {
                     style: style, arrowheadStyle: 'fill: #333', arrowhead: aHead
-                }, cnt);
+                },cnt);
             }
         }
         // Edge with text
         else {
-                var edgeText = edge.text.replace(/<br>/g, '\n');
-                if (typeof edge.style === 'undefined') {
-                    if (conf.htmlLabels) {
-                        g.setEdge(edge.start, edge.end, { labelType: 'html', style: style, labelpos: 'c', label: '<span class="edgeLabel">' + edge.text + '</span>', arrowheadStyle: 'fill: #333', arrowhead: aHead }, cnt);
-                    } else {
-                        g.setEdge(edge.start, edge.end, { labelType: 'text', style: 'stroke: #333; stroke-width: 1.5px;fill:none', labelpos: 'c', label: edgeText, arrowheadStyle: 'fill: #333', arrowhead: aHead }, cnt);
-                    }
-                } else {
-                    g.setEdge(edge.start, edge.end, {
-                        labelType: 'text', style: style, arrowheadStyle: 'fill: #333', label: edgeText, arrowhead: aHead
-                    }, cnt);
+            var edgeText = edge.text.replace(/<br>/g, '\n');
+            if(typeof edge.style === 'undefined'){
+                if (conf.htmlLabels){
+                    g.setEdge(edge.start, edge.end,{labelType: 'html',style: style, labelpos:'c', label: '<span class="edgeLabel">'+edge.text+'</span>', arrowheadStyle: 'fill: #333', arrowhead: aHead},cnt);
+                }else{
+                    g.setEdge(edge.start, edge.end,{labelType: 'text', style: 'stroke: #333; stroke-width: 1.5px;fill:none', labelpos:'c', label: edgeText, arrowheadStyle: 'fill: #333', arrowhead: aHead},cnt);
                 }
+             }else{
+                g.setEdge(edge.start, edge.end, {
+                    labelType: 'text', style: style, arrowheadStyle: 'fill: #333', label: edgeText, arrowhead: aHead
+                },cnt);
             }
+        }
     });
 };
 
@@ -33431,9 +33892,10 @@ exports.addEdges = function (edges, g) {
 exports.getClasses = function (text, isDot) {
     var parser;
     graph.clear();
-    if (isDot) {
+    if(isDot){
         parser = dot.parser;
-    } else {
+
+    }else{
         parser = flow.parser;
     }
     parser.yy = graph;
@@ -33444,13 +33906,13 @@ exports.getClasses = function (text, isDot) {
     var classes = graph.getClasses();
 
     // Add default class if undefined
-    if (typeof classes['default'] === 'undefined') {
-        classes['default'] = { id: 'default' };
+    if(typeof(classes.default) === 'undefined') {
+        classes.default = {id:'default'};
         //classes.default.styles = ['fill:#ffa','stroke:#666','stroke-width:3px'];
-        classes['default'].styles = [];
-        classes['default'].clusterStyles = ['rx:4px', 'fill: rgb(255, 255, 222)', 'rx: 4px', 'stroke: rgb(170, 170, 51)', 'stroke-width: 1px'];
-        classes['default'].nodeLabelStyles = ['fill:#000', 'stroke:none', 'font-weight:300', 'font-family:"Helvetica Neue",Helvetica,Arial,sans-serf', 'font-size:14px'];
-        classes['default'].edgeLabelStyles = ['fill:#000', 'stroke:none', 'font-weight:300', 'font-family:"Helvetica Neue",Helvetica,Arial,sans-serf', 'font-size:14px'];
+        classes.default.styles = [];
+        classes.default.clusterStyles = ['rx:4px','fill: rgb(255, 255, 222)','rx: 4px','stroke: rgb(170, 170, 51)','stroke-width: 1px'];
+        classes.default.nodeLabelStyles = ['fill:#000','stroke:none','font-weight:300','font-family:"Helvetica Neue",Helvetica,Arial,sans-serf','font-size:14px'];
+        classes.default.edgeLabelStyles = ['fill:#000','stroke:none','font-weight:300','font-family:"Helvetica Neue",Helvetica,Arial,sans-serf','font-size:14px'];
     }
     return classes;
 };
@@ -33460,51 +33922,55 @@ exports.getClasses = function (text, isDot) {
  * @param text
  * @param id
  */
-exports.draw = function (text, id, isDot) {
+exports.draw = function (text, id,isDot) {
     log.debug('Drawing flowchart');
     var parser;
     graph.clear();
-    if (isDot) {
+    if(isDot){
         parser = dot.parser;
-    } else {
+
+    }else{
         parser = flow.parser;
     }
     parser.yy = graph;
 
     // Parse the graph definition
-    try {
+    try{
 
         parser.parse(text);
-    } catch (err) {
+    }
+    catch(err){
         log.debug('Parsing failed');
     }
 
     // Fetch the default direction, use TD if none was found
     var dir;
     dir = graph.getDirection();
-    if (typeof dir === 'undefined') {
-        dir = 'TD';
+    if(typeof dir === 'undefined'){
+        dir='TD';
     }
 
     // Create the input mermaid.graph
     var g = new dagreD3.graphlib.Graph({
-        multigraph: true,
+        multigraph:true,
         compound: true
-    }).setGraph({
-        rankdir: dir,
-        marginx: 20,
-        marginy: 20
+    })
+        .setGraph({
+            rankdir: dir,
+            marginx: 20,
+            marginy: 20
 
-    }).setDefaultEdgeLabel(function () {
-        return {};
-    });
+        })
+        .setDefaultEdgeLabel(function () {
+            return {};
+        });
 
     var subG;
     var subGraphs = graph.getSubGraphs();
     var i = 0;
-    for (i = subGraphs.length - 1; i >= 0; i--) {
+    for(i=subGraphs.length-1;i>=0;i--){
         subG = subGraphs[i];
-        graph.addVertex(subG.id, subG.title, 'group', undefined);
+        graph.addVertex(subG.id,subG.title,'group',undefined);
     }
 
     // Fetch the verices/nodes and edges/links from the parsed graph definition
@@ -33515,14 +33981,14 @@ exports.draw = function (text, id, isDot) {
 
     i = 0;
     var j;
-    for (i = subGraphs.length - 1; i >= 0; i--) {
+    for(i=subGraphs.length-1;i>=0;i--){
         subG = subGraphs[i];
 
         d3.selectAll('cluster').append('text');
 
-        for (j = 0; j < subG.nodes.length; j++) {
+        for(j=0;j<subG.nodes.length;j++){
             //log.debug('Setting node',subG.nodes[j],' to subgraph '+id);
-            g.setParent(subG.nodes[j], subG.id);
+            g.setParent(subG.nodes[j],subG.id);
         }
     }
     exports.addVertices(vert, g);
@@ -33536,10 +34002,19 @@ exports.draw = function (text, id, isDot) {
         var w = bbox.width,
             h = bbox.height,
             s = (w + h) * 0.8,
-            points = [{ x: s / 2, y: 0 }, { x: s, y: -s / 2 }, { x: s / 2, y: -s }, { x: 0, y: -s / 2 }];
-        var shapeSvg = parent.insert('polygon', ':first-child').attr('points', points.map(function (d) {
-            return d.x + ',' + d.y;
-        }).join(' ')).attr('rx', 5).attr('ry', 5).attr('transform', 'translate(' + -s / 2 + ',' + s * 2 / 4 + ')');
+            points = [
+                {x: s / 2, y: 0},
+                {x: s, y: -s / 2},
+                {x: s / 2, y: -s},
+                {x: 0, y: -s / 2}
+            ];
+        var shapeSvg = parent.insert('polygon', ':first-child')
+            .attr('points', points.map(function (d) {
+                return d.x + ',' + d.y;
+            }).join(' '))
+            .attr('rx', 5)
+            .attr('ry', 5)
+            .attr('transform', 'translate(' + (-s / 2) + ',' + (s * 2 / 4) + ')');
         node.intersect = function (point) {
             return dagreD3.intersect.polygon(node, points, point);
         };
@@ -33550,10 +34025,18 @@ exports.draw = function (text, id, isDot) {
     render.shapes().rect_left_inv_arrow = function (parent, bbox, node) {
         var w = bbox.width,
             h = bbox.height,
-            points = [{ x: -h / 2, y: 0 }, { x: w, y: 0 }, { x: w, y: -h }, { x: -h / 2, y: -h }, { x: 0, y: -h / 2 }];
-        var shapeSvg = parent.insert('polygon', ':first-child').attr('points', points.map(function (d) {
-            return d.x + ',' + d.y;
-        }).join(' ')).attr('transform', 'translate(' + -w / 2 + ',' + h * 2 / 4 + ')');
+            points = [
+                {x: -h/2, y: 0},
+                {x: w, y: 0},
+                {x: w, y: -h},
+                {x: -h/2, y: -h},
+                {x: 0, y: -h/2}
+            ];
+        var shapeSvg = parent.insert('polygon', ':first-child')
+            .attr('points', points.map(function (d) {
+                return d.x + ',' + d.y;
+            }).join(' '))
+            .attr('transform', 'translate(' + (-w / 2) + ',' + (h * 2 / 4) + ')');
         node.intersect = function (point) {
             return dagreD3.intersect.polygon(node, points, point);
         };
@@ -33564,10 +34047,18 @@ exports.draw = function (text, id, isDot) {
     render.shapes().rect_right_inv_arrow = function (parent, bbox, node) {
         var w = bbox.width,
             h = bbox.height,
-            points = [{ x: 0, y: 0 }, { x: w + h / 2, y: 0 }, { x: w, y: -h / 2 }, { x: w + h / 2, y: -h }, { x: 0, y: -h }];
-        var shapeSvg = parent.insert('polygon', ':first-child').attr('points', points.map(function (d) {
-            return d.x + ',' + d.y;
-        }).join(' ')).attr('transform', 'translate(' + -w / 2 + ',' + h * 2 / 4 + ')');
+            points = [
+                {x: 0, y: 0},
+                {x: w+h/2, y: 0},
+                {x: w, y: -h/2},
+                {x: w+h/2, y: -h},
+                {x: 0, y: -h}
+            ];
+        var shapeSvg = parent.insert('polygon', ':first-child')
+            .attr('points', points.map(function (d) {
+                return d.x + ',' + d.y;
+            }).join(' '))
+            .attr('transform', 'translate(' + (-w / 2) + ',' + (h * 2 / 4) + ')');
         node.intersect = function (point) {
             return dagreD3.intersect.polygon(node, points, point);
         };
@@ -33576,9 +34067,18 @@ exports.draw = function (text, id, isDot) {
 
     // Add our custom arrow - an empty arrowhead
     render.arrows().none = function normal(parent, id, edge, type) {
-        var marker = parent.append('marker').attr('id', id).attr('viewBox', '0 0 10 10').attr('refX', 9).attr('refY', 5).attr('markerUnits', 'strokeWidth').attr('markerWidth', 8).attr('markerHeight', 6).attr('orient', 'auto');
+        var marker = parent.append('marker')
+            .attr('id', id)
+            .attr('viewBox', '0 0 10 10')
+            .attr('refX', 9)
+            .attr('refY', 5)
+            .attr('markerUnits', 'strokeWidth')
+            .attr('markerWidth', 8)
+            .attr('markerHeight', 6)
+            .attr('orient', 'auto');
 
-        var path = marker.append('path').attr('d', 'M 0 0 L 0 0 L 0 0 z');
+        var path = marker.append('path')
+            .attr('d', 'M 0 0 L 0 0 L 0 0 z');
         dagreD3.util.applyStyle(path, edge[type + 'Style']);
     };
 
@@ -33591,45 +34091,47 @@ exports.draw = function (text, id, isDot) {
     render(element, g);
 
     //var tip = d3.tip().html(function(d) { return d; });
-    element.selectAll('g.node').attr('title', function () {
-        return graph.getTooltip(this.id);
-    });
+    element.selectAll('g.node')
+                .attr('title', function(){
+            return graph.getTooltip(this.id);
+        });
 
-    /*
-     var xPos = document.querySelectorAll('.clusters rect')[0].x.baseVal.value;
-     var width = document.querySelectorAll('.clusters rect')[0].width.baseVal.value;
-        var cluster = d3.selectAll('.cluster');
-        var te = cluster.append('text');
-        te.attr('x', xPos+width/2);
-        te.attr('y', 12);
-        //te.stroke('black');
-        te.attr('id', 'apa12');
-        te.style('text-anchor', 'middle');
-        te.text('Title for cluster');
-    */
-    if (conf.useMaxWidth) {
+/*
+ var xPos = document.querySelectorAll('.clusters rect')[0].x.baseVal.value;
+ var width = document.querySelectorAll('.clusters rect')[0].width.baseVal.value;
+    var cluster = d3.selectAll('.cluster');
+    var te = cluster.append('text');
+    te.attr('x', xPos+width/2);
+    te.attr('y', 12);
+    //te.stroke('black');
+    te.attr('id', 'apa12');
+    te.style('text-anchor', 'middle');
+    te.text('Title for cluster');
+*/
+    if(conf.useMaxWidth) {
         // Center the graph
         svg.attr('height', '100%');
         svg.attr('width', conf.width);
         //svg.attr('viewBox', svgb.getBBox().x + ' 0 '+ g.graph().width+' '+ g.graph().height);
         svg.attr('viewBox', '0 0 ' + (g.graph().width + 20) + ' ' + (g.graph().height + 20));
         svg.attr('style', 'max-width:' + (g.graph().width + 20) + 'px;');
-    } else {
+    }
+    else{
         // Center the graph
-        svg.attr('height', g.graph().height);
-        if (typeof conf.width === 'undefined') {
-            svg.attr('width', g.graph().width);
-        } else {
-            svg.attr('width', conf.width);
+        svg.attr('height', g.graph().height );
+        if(typeof conf.width === 'undefined'){
+            svg.attr('width', g.graph().width );
+        }else{
+            svg.attr('width', conf.width );
         }
         //svg.attr('viewBox', svgb.getBBox().x + ' 0 '+ g.graph().width+' '+ g.graph().height);
-        svg.attr('viewBox', '0 0 ' + (g.graph().width + 20) + ' ' + (g.graph().height + 20));
-    }
+        svg.attr('viewBox',  '0 0 ' + (g.graph().width+20) + ' ' + (g.graph().height+20));    }
+
 
     // Index nodes
-    graph.indexNodes('subGraph' + i);
-
-    for (i = 0; i < subGraphs.length; i++) {
+    graph.indexNodes('subGraph'+i);
+    
+    for(i=0;i<subGraphs.length;i++){
         subG = subGraphs[i];
 
         if (subG.title !== 'undefined') {
@@ -33649,23 +34151,23 @@ exports.draw = function (text, id, isDot) {
             te.attr('id', id + 'Text');
             te.style('text-anchor', 'middle');
 
-            if (typeof subG.title === 'undefined') {
+            if(typeof subG.title === 'undefined'){
                 te.text('Undef');
-            } else {
+            }else{
                 //te.text(subGraphs[subGraphs.length-i-1].title);
                 te.text(subG.title);
+
             }
         }
     }
 };
 
-},{"../../d3":107,"../../logger":126,"./dagre-d3":114,"./graphDb":116,"./parser/dot":117,"./parser/flow":118}],116:[function(require,module,exports){
+
+},{"../../d3":107,"../../logger":127,"./dagre-d3":114,"./graphDb":116,"./parser/dot":117,"./parser/flow":118}],116:[function(require,module,exports){
 (function (global){
 /**
  * Created by knut on 14-11-03.
  */
-'use strict';
-
 var Logger = require('../../logger');
 var log = new Logger.Log();
 
@@ -33675,7 +34177,7 @@ var edges = [];
 var classes = [];
 var subGraphs = [];
 var tooltips = {};
-var subCount = 0;
+var subCount=0;
 var direction;
 // Functions to be run after graph rendering
 var funs = [];
@@ -33688,23 +34190,23 @@ var funs = [];
  */
 exports.addVertex = function (id, text, type, style) {
     var txt;
-
-    if (typeof id === 'undefined') {
+    
+    if(typeof id === 'undefined'){
         return;
     }
-    if (id.trim().length === 0) {
+    if(id.trim().length === 0){
         return;
     }
 
     if (typeof vertices[id] === 'undefined') {
-        vertices[id] = { id: id, styles: [], classes: [] };
+        vertices[id] = {id: id, styles: [], classes:[]};
     }
     if (typeof text !== 'undefined') {
         txt = text.trim();
-
+        
         // strip quotes if string starts and exnds with a quote
-        if (txt[0] === '"' && txt[txt.length - 1] === '"') {
-            txt = txt.substring(1, txt.length - 1);
+        if(txt[0] === '"' && txt[txt.length-1] === '"'){
+            txt = txt.substring(1,txt.length-1);
         }
 
         vertices[id].text = txt;
@@ -33733,15 +34235,15 @@ exports.addVertex = function (id, text, type, style) {
  */
 exports.addLink = function (start, end, type, linktext) {
     log.debug('Got edge', start, end);
-    var edge = { start: start, end: end, type: undefined, text: '' };
+    var edge = {start: start, end: end, type: undefined, text: ''};
     linktext = type.text;
 
     if (typeof linktext !== 'undefined') {
         edge.text = linktext.trim();
-
+        
         // strip quotes if string starts and exnds with a quote
-        if (edge.text[0] === '"' && edge.text[edge.text.length - 1] === '"') {
-            edge.text = edge.text.substring(1, edge.text.length - 1);
+        if(edge.text[0] === '"' && edge.text[edge.text.length-1] === '"'){
+            edge.text = edge.text.substring(1,edge.text.length-1);
         }
     }
 
@@ -33757,16 +34259,16 @@ exports.addLink = function (start, end, type, linktext) {
  * @param style
  */
 exports.updateLink = function (pos, style) {
-    if (pos === 'default') {
+    if(pos === 'default'){
         edges.defaultStyle = style;
-    } else {
+    }else{
         edges[pos].style = style;
     }
 };
 
 exports.addClass = function (id, style) {
     if (typeof classes[id] === 'undefined') {
-        classes[id] = { id: id, styles: [] };
+        classes[id] = {id: id, styles: []};
     }
 
     if (typeof style !== 'undefined') {
@@ -33790,33 +34292,33 @@ exports.setDirection = function (dir) {
  * Called by parser when a graph definition is found, stores the direction of the chart.
  * @param dir
  */
-exports.setClass = function (id, className) {
-    if (id.indexOf(',') > 0) {
-        id.split(',').forEach(function (id2) {
-            if (typeof vertices[id2] !== 'undefined') {
+exports.setClass = function (id,className) {
+    if(id.indexOf(',')>0){
+        id.split(',').forEach(function(id2){
+            if(typeof vertices[id2] !== 'undefined'){
                 vertices[id2].classes.push(className);
             }
         });
-    } else {
-        if (typeof vertices[id] !== 'undefined') {
+    }else{
+        if(typeof vertices[id] !== 'undefined'){
             vertices[id].classes.push(className);
         }
     }
 };
 
-var setTooltip = function setTooltip(id, tooltip) {
-    if (typeof tooltip !== 'undefined') {
-        tooltips[id] = tooltip;
+var setTooltip = function(id,tooltip){
+    if(typeof  tooltip !== 'undefined'){
+        tooltips[id]=tooltip;
     }
 };
 
-var setClickFun = function setClickFun(id, functionName) {
-    if (typeof functionName === 'undefined') {
+var setClickFun = function(id, functionName){
+    if(typeof functionName === 'undefined'){
         return;
     }
     if (typeof vertices[id] !== 'undefined') {
         funs.push(function (element) {
-            var elem = d3.select(element).select('#' + id);
+            var elem = d3.select(element).select('#'+id);
             if (elem !== null) {
                 elem.on('click', function () {
                     eval(functionName + '(\'' + id + '\')'); // jshint ignore:line
@@ -33826,22 +34328,22 @@ var setClickFun = function setClickFun(id, functionName) {
     }
 };
 
-var setLink = function setLink(id, linkStr) {
-    if (typeof linkStr === 'undefined') {
+var setLink = function(id, linkStr){
+    if(typeof linkStr === 'undefined'){
         return;
     }
     if (typeof vertices[id] !== 'undefined') {
         funs.push(function (element) {
-            var elem = d3.select(element).select('#' + id);
+            var elem = d3.select(element).select('#'+id);
             if (elem !== null) {
                 elem.on('click', function () {
-                    window.open(linkStr, 'newTab'); // jshint ignore:line
+                    window.open(linkStr,'newTab'); // jshint ignore:line
                 });
             }
         });
     }
 };
-exports.getTooltip = function (id) {
+exports.getTooltip = function(id){
     return tooltips[id];
 };
 
@@ -33849,22 +34351,22 @@ exports.getTooltip = function (id) {
  * Called by parser when a graph definition is found, stores the direction of the chart.
  * @param dir
  */
-exports.setClickEvent = function (id, functionName, link, tooltip) {
-    if (id.indexOf(',') > 0) {
-        id.split(',').forEach(function (id2) {
-            setTooltip(id2, tooltip);
-            setClickFun(id2, functionName);
-            setLink(id2, link);
-        });
-    } else {
-        setTooltip(id, tooltip);
-        setClickFun(id, functionName);
-        setLink(id, link);
-    }
+exports.setClickEvent = function (id,functionName, link,tooltip) {
+        if(id.indexOf(',')>0){
+            id.split(',').forEach(function(id2) {
+                setTooltip(id2,tooltip);
+                setClickFun(id2, functionName);
+                setLink(id2, link);
+            });
+        }else{
+            setTooltip(id,tooltip);
+            setClickFun(id, functionName);
+            setLink(id, link);
+        }
 };
 
-exports.bindFunctions = function (element) {
-    funs.forEach(function (fun) {
+exports.bindFunctions = function(element){
+    funs.forEach(function(fun){
         fun(element);
     });
 };
@@ -33895,33 +34397,45 @@ exports.getClasses = function () {
     return classes;
 };
 
-var setupToolTips = function setupToolTips(element) {
+var setupToolTips = function(element){
 
     var tooltipElem = d3.select('.mermaidTooltip');
-    if (tooltipElem[0][0] === null) {
-        tooltipElem = d3.select('body').append('div').attr('class', 'mermaidTooltip').style('opacity', 0);
+    if(tooltipElem[0][0] === null){
+        tooltipElem = d3.select('body')
+            .append('div')
+            .attr('class', 'mermaidTooltip')
+            .style('opacity', 0);
     }
 
     var svg = d3.select(element).select('svg');
 
     var nodes = svg.selectAll('g.node');
-    nodes.on('mouseover', function () {
-        var el = d3.select(this);
-        var title = el.attr('title');
-        // Dont try to draw a tooltip if no data is provided
-        if (title === null) {
-            return;
-        }
-        var rect = this.getBoundingClientRect();
+    nodes
+        .on('mouseover', function() {
+            var el = d3.select(this);
+            var title = el.attr('title');
+            // Dont try to draw a tooltip if no data is provided
+            if(title === null){
+                return;
+            }
+            var rect = this.getBoundingClientRect();
 
-        tooltipElem.transition().duration(200).style('opacity', '.9');
-        tooltipElem.html(el.attr('title')).style('left', rect.left + (rect.right - rect.left) / 2 + 'px').style('top', rect.top - 14 + document.body.scrollTop + 'px');
-        el.classed('hover', true);
-    }).on('mouseout', function () {
-        tooltipElem.transition().duration(500).style('opacity', 0);
-        var el = d3.select(this);
-        el.classed('hover', false);
-    });
+            tooltipElem.transition()
+                .duration(200)
+                .style('opacity', '.9');
+            tooltipElem.html(el.attr('title'))
+                .style('left', (rect.left+(rect.right-rect.left)/2) + 'px')
+                .style('top', (rect.top-14+document.body.scrollTop) + 'px');
+            el.classed('hover',true);
+
+        })
+        .on('mouseout', function() {
+            tooltipElem.transition()
+                .duration(500)
+                .style('opacity', 0);
+            var el = d3.select(this);
+            el.classed('hover',false);
+        });
 };
 funs.push(setupToolTips);
 
@@ -33951,34 +34465,37 @@ exports.defaultStyle = function () {
  */
 exports.addSubGraph = function (list, title) {
     function uniq(a) {
-        var prims = { 'boolean': {}, 'number': {}, 'string': {} },
-            objs = [];
+        var prims = {'boolean':{}, 'number':{}, 'string':{}}, objs = [];
 
-        return a.filter(function (item) {
+        return a.filter(function(item) {
             var type = typeof item;
-            if (item === ' ') {
+            if(item===' '){
                 return false;
             }
-            if (type in prims) return prims[type].hasOwnProperty(item) ? false : prims[type][item] = true;else return objs.indexOf(item) >= 0 ? false : objs.push(item);
+            if(type in prims)
+                return prims[type].hasOwnProperty(item) ? false : (prims[type][item] = true);
+            else
+                return objs.indexOf(item) >= 0 ? false : objs.push(item);
         });
     }
 
     var nodeList = [];
 
-    nodeList = uniq(nodeList.concat.apply(nodeList, list));
+    nodeList = uniq(nodeList.concat.apply(nodeList,list));
 
-    var subGraph = { id: 'subGraph' + subCount, nodes: nodeList, title: title };
-    //log.debug('subGraph:' + subGraph.title + subGraph.id);
-    //log.debug(subGraph.nodes);
+
+    var subGraph = {id:'subGraph'+subCount, nodes:nodeList,title:title};
+//log.debug('subGraph:' + subGraph.title + subGraph.id);
+//log.debug(subGraph.nodes);
     subGraphs.push(subGraph);
     subCount = subCount + 1;
     return subGraph.id;
 };
 
-var getPosForId = function getPosForId(id) {
+var getPosForId = function(id){
     var i;
-    for (i = 0; i < subGraphs.length; i++) {
-        if (subGraphs[i].id === id) {
+    for(i=0;i<subGraphs.length;i++){
+        if(subGraphs[i].id===id){
             //log.debug('Found pos for ',id,' ',i);
             return i;
         }
@@ -33988,54 +34505,59 @@ var getPosForId = function getPosForId(id) {
 };
 var secCount = -1;
 var posCrossRef = [];
-var indexNodes = function indexNodes(id, pos) {
+var indexNodes = function (id, pos) {
     var nodes = subGraphs[pos].nodes;
     secCount = secCount + 1;
-    if (secCount > 2000) {
+    if(secCount>2000){
         return;
+        
     }
     //var nPos = getPosForId(subGraphs[pos].id);
-    posCrossRef[secCount] = pos;
+    posCrossRef[secCount]=pos;
     // Check if match
-    if (subGraphs[pos].id === id) {
+    if(subGraphs[pos].id === id){
         return {
-            result: true,
-            count: 0
+            result:true,
+            count:0
         };
     }
+    
 
     var count = 0;
     var posCount = 1;
-    while (count < nodes.length) {
+    while(count<nodes.length){
         var childPos = getPosForId(nodes[count]);
         // Ignore regular nodes (pos will be -1)
-        if (childPos >= 0) {
-            var res = indexNodes(id, childPos);
-            if (res.result) {
+        if(childPos>=0){
+            var res = indexNodes(id,childPos);
+            if(res.result){
                 return {
-                    result: true,
-                    count: posCount + res.count
+                    result:true,
+                    count:posCount+res.count
                 };
-            } else {
+            }else{
                 posCount = posCount + res.count;
             }
         }
-        count = count + 1;
+        count = count +1;
     }
-
+    
     return {
-        result: false,
-        count: posCount
+        result:false,
+        count:posCount
     };
+
 };
+
+
 
 exports.getDepthFirstPos = function (pos) {
     return posCrossRef[pos];
 };
 exports.indexNodes = function () {
     secCount = -1;
-    if (subGraphs.length > 0) {
-        indexNodes('none', subGraphs.length - 1, 0);
+    if(subGraphs.length>0){
+        indexNodes('none',subGraphs.length-1,0);
     }
 };
 
@@ -34043,14 +34565,13 @@ exports.getSubGraphs = function () {
     return subGraphs;
 };
 
-exports.parseError = function (err, hash) {
-    global.mermaidAPI.parseError(err, hash);
+exports.parseError = function(err,hash){
+    global.mermaidAPI.parseError(err,hash);
 };
-
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../d3":107,"../../logger":126}],117:[function(require,module,exports){
+}).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../../d3":107,"../../logger":127}],117:[function(require,module,exports){
 (function (process){
-/* parser generated by jison 0.4.15 */
+/* parser generated by jison 0.4.16 */
 /*
   Returns a Parser object of the following structure:
 
@@ -34123,765 +34644,678 @@ exports.parseError = function (err, hash) {
     recoverable: (boolean: TRUE when the parser has a error recovery rule available for this particular error)
   }
 */
-"use strict";
+var parser = (function(){
+var o=function(k,v,o,l){for(o=o||{},l=k.length;l--;o[k[l]]=v);return o},$V0=[1,5],$V1=[1,6],$V2=[1,12],$V3=[1,13],$V4=[1,14],$V5=[1,15],$V6=[1,16],$V7=[1,17],$V8=[1,18],$V9=[1,19],$Va=[1,20],$Vb=[1,21],$Vc=[1,22],$Vd=[8,16,17,18,19,20,21,22,23,24,25,26],$Ve=[1,37],$Vf=[1,33],$Vg=[1,34],$Vh=[1,35],$Vi=[1,36],$Vj=[8,10,16,17,18,19,20,21,22,23,24,25,26,28,32,37,39,40,45,57,58],$Vk=[10,28],$Vl=[10,28,37,57,58],$Vm=[2,49],$Vn=[1,45],$Vo=[1,48],$Vp=[1,49],$Vq=[1,52],$Vr=[2,65],$Vs=[1,65],$Vt=[1,66],$Vu=[1,67],$Vv=[1,68],$Vw=[1,69],$Vx=[1,70],$Vy=[1,71],$Vz=[1,72],$VA=[1,73],$VB=[8,16,17,18,19,20,21,22,23,24,25,26,47],$VC=[10,28,37];
+var parser = {trace: function trace() { },
+yy: {},
+symbols_: {"error":2,"expressions":3,"graph":4,"EOF":5,"graphStatement":6,"idStatement":7,"{":8,"stmt_list":9,"}":10,"strict":11,"GRAPH":12,"DIGRAPH":13,"textNoTags":14,"textNoTagsToken":15,"ALPHA":16,"NUM":17,"COLON":18,"PLUS":19,"EQUALS":20,"MULT":21,"DOT":22,"BRKT":23,"SPACE":24,"MINUS":25,"keywords":26,"stmt":27,";":28,"node_stmt":29,"edge_stmt":30,"attr_stmt":31,"=":32,"subgraph":33,"attr_list":34,"NODE":35,"EDGE":36,"[":37,"a_list":38,"]":39,",":40,"edgeRHS":41,"node_id":42,"edgeop":43,"port":44,":":45,"compass_pt":46,"SUBGRAPH":47,"n":48,"ne":49,"e":50,"se":51,"s":52,"sw":53,"w":54,"nw":55,"c":56,"ARROW_POINT":57,"ARROW_OPEN":58,"$accept":0,"$end":1},
+terminals_: {2:"error",5:"EOF",8:"{",10:"}",11:"strict",12:"GRAPH",13:"DIGRAPH",16:"ALPHA",17:"NUM",18:"COLON",19:"PLUS",20:"EQUALS",21:"MULT",22:"DOT",23:"BRKT",24:"SPACE",25:"MINUS",26:"keywords",28:";",32:"=",35:"NODE",36:"EDGE",37:"[",39:"]",40:",",45:":",47:"SUBGRAPH",48:"n",49:"ne",50:"e",51:"se",52:"s",53:"sw",54:"w",55:"nw",56:"c",57:"ARROW_POINT",58:"ARROW_OPEN"},
+productions_: [0,[3,2],[4,5],[4,6],[4,4],[6,1],[6,1],[7,1],[14,1],[14,2],[15,1],[15,1],[15,1],[15,1],[15,1],[15,1],[15,1],[15,1],[15,1],[15,1],[15,1],[9,1],[9,3],[27,1],[27,1],[27,1],[27,3],[27,1],[31,2],[31,2],[31,2],[34,4],[34,3],[34,3],[34,2],[38,5],[38,5],[38,3],[30,3],[30,3],[30,2],[30,2],[41,3],[41,3],[41,2],[41,2],[29,2],[29,1],[42,2],[42,1],[44,4],[44,2],[44,2],[33,5],[33,4],[33,3],[46,1],[46,1],[46,1],[46,1],[46,1],[46,1],[46,1],[46,1],[46,1],[46,0],[43,1],[43,1]],
+performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
+/* this == yyval */
 
-var dot = (function () {
-    var o = function o(k, v, _o, l) {
-        for (_o = _o || {}, l = k.length; l--; _o[k[l]] = v);return _o;
-    },
-        $V0 = [1, 5],
-        $V1 = [1, 6],
-        $V2 = [1, 12],
-        $V3 = [1, 13],
-        $V4 = [1, 14],
-        $V5 = [1, 15],
-        $V6 = [1, 16],
-        $V7 = [1, 17],
-        $V8 = [1, 18],
-        $V9 = [1, 19],
-        $Va = [1, 20],
-        $Vb = [1, 21],
-        $Vc = [1, 22],
-        $Vd = [8, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26],
-        $Ve = [1, 37],
-        $Vf = [1, 33],
-        $Vg = [1, 34],
-        $Vh = [1, 35],
-        $Vi = [1, 36],
-        $Vj = [8, 10, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 28, 32, 37, 39, 40, 45, 57, 58],
-        $Vk = [10, 28],
-        $Vl = [10, 28, 37, 57, 58],
-        $Vm = [2, 49],
-        $Vn = [1, 45],
-        $Vo = [1, 48],
-        $Vp = [1, 49],
-        $Vq = [1, 52],
-        $Vr = [2, 65],
-        $Vs = [1, 65],
-        $Vt = [1, 66],
-        $Vu = [1, 67],
-        $Vv = [1, 68],
-        $Vw = [1, 69],
-        $Vx = [1, 70],
-        $Vy = [1, 71],
-        $Vz = [1, 72],
-        $VA = [1, 73],
-        $VB = [8, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 47],
-        $VC = [10, 28, 37];
-    var parser = { trace: function trace() {},
-        yy: {},
-        symbols_: { "error": 2, "expressions": 3, "graph": 4, "EOF": 5, "graphStatement": 6, "idStatement": 7, "{": 8, "stmt_list": 9, "}": 10, "strict": 11, "GRAPH": 12, "DIGRAPH": 13, "textNoTags": 14, "textNoTagsToken": 15, "ALPHA": 16, "NUM": 17, "COLON": 18, "PLUS": 19, "EQUALS": 20, "MULT": 21, "DOT": 22, "BRKT": 23, "SPACE": 24, "MINUS": 25, "keywords": 26, "stmt": 27, ";": 28, "node_stmt": 29, "edge_stmt": 30, "attr_stmt": 31, "=": 32, "subgraph": 33, "attr_list": 34, "NODE": 35, "EDGE": 36, "[": 37, "a_list": 38, "]": 39, ",": 40, "edgeRHS": 41, "node_id": 42, "edgeop": 43, "port": 44, ":": 45, "compass_pt": 46, "SUBGRAPH": 47, "n": 48, "ne": 49, "e": 50, "se": 51, "s": 52, "sw": 53, "w": 54, "nw": 55, "c": 56, "ARROW_POINT": 57, "ARROW_OPEN": 58, "$accept": 0, "$end": 1 },
-        terminals_: { 2: "error", 5: "EOF", 8: "{", 10: "}", 11: "strict", 12: "GRAPH", 13: "DIGRAPH", 16: "ALPHA", 17: "NUM", 18: "COLON", 19: "PLUS", 20: "EQUALS", 21: "MULT", 22: "DOT", 23: "BRKT", 24: "SPACE", 25: "MINUS", 26: "keywords", 28: ";", 32: "=", 35: "NODE", 36: "EDGE", 37: "[", 39: "]", 40: ",", 45: ":", 47: "SUBGRAPH", 48: "n", 49: "ne", 50: "e", 51: "se", 52: "s", 53: "sw", 54: "w", 55: "nw", 56: "c", 57: "ARROW_POINT", 58: "ARROW_OPEN" },
-        productions_: [0, [3, 2], [4, 5], [4, 6], [4, 4], [6, 1], [6, 1], [7, 1], [14, 1], [14, 2], [15, 1], [15, 1], [15, 1], [15, 1], [15, 1], [15, 1], [15, 1], [15, 1], [15, 1], [15, 1], [15, 1], [9, 1], [9, 3], [27, 1], [27, 1], [27, 1], [27, 3], [27, 1], [31, 2], [31, 2], [31, 2], [34, 4], [34, 3], [34, 3], [34, 2], [38, 5], [38, 5], [38, 3], [30, 3], [30, 3], [30, 2], [30, 2], [41, 3], [41, 3], [41, 2], [41, 2], [29, 2], [29, 1], [42, 2], [42, 1], [44, 4], [44, 2], [44, 2], [33, 5], [33, 4], [33, 3], [46, 1], [46, 1], [46, 1], [46, 1], [46, 1], [46, 1], [46, 1], [46, 1], [46, 1], [46, 0], [43, 1], [43, 1]],
-        performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, /* action[1] */$$, /* vstack */_$ /* lstack */) {
-            /* this == yyval */
+var $0 = $$.length - 1;
+switch (yystate) {
+case 1:
+this.$=$$[$0-1];
+break;
+case 2:
+this.$=$$[$0-4];
+break;
+case 3:
+this.$=$$[$0-5];
+break;
+case 4:
+this.$=$$[$0-3];
+break;
+case 8: case 10: case 11:
+this.$=$$[$0];
+break;
+case 9:
+this.$=$$[$0-1]+''+$$[$0];
+break;
+case 12: case 13: case 14: case 15: case 16: case 18: case 19: case 20:
+this.$ = $$[$0];
+break;
+case 17:
+this.$ = '<br>';
+break;
+case 39:
+this.$='oy';
+break;
+case 40:
 
-            var $0 = $$.length - 1;
-            switch (yystate) {
-                case 1:
-                    this.$ = $$[$0 - 1];
-                    break;
-                case 2:
-                    this.$ = $$[$0 - 4];
-                    break;
-                case 3:
-                    this.$ = $$[$0 - 5];
-                    break;
-                case 4:
-                    this.$ = $$[$0 - 3];
-                    break;
-                case 8:case 10:case 11:
-                    this.$ = $$[$0];
-                    break;
-                case 9:
-                    this.$ = $$[$0 - 1] + '' + $$[$0];
-                    break;
-                case 12:case 13:case 14:case 15:case 16:case 18:case 19:case 20:
-                    this.$ = $$[$0];
-                    break;
-                case 17:
-                    this.$ = '<br>';
-                    break;
-                case 39:
-                    this.$ = 'oy';
-                    break;
-                case 40:
+        yy.addLink($$[$0-1],$$[$0].id,$$[$0].op);
+        this.$='oy';
+break;
+case 42:
 
-                    yy.addLink($$[$0 - 1], $$[$0].id, $$[$0].op);
-                    this.$ = 'oy';
-                    break;
-                case 42:
+        yy.addLink($$[$0-1],$$[$0].id,$$[$0].op);
+        this.$={op:$$[$0-2],id:$$[$0-1]};
+    
+break;
+case 44:
 
-                    yy.addLink($$[$0 - 1], $$[$0].id, $$[$0].op);
-                    this.$ = { op: $$[$0 - 2], id: $$[$0 - 1] };
+        this.$={op:$$[$0-1],id:$$[$0]};
+    
+break;
+case 48:
+yy.addVertex($$[$0-1]);this.$=$$[$0-1];
+break;
+case 49:
+yy.addVertex($$[$0]);this.$=$$[$0];
+break;
+case 66:
+this.$='arrow';
+break;
+case 67:
+this.$='arrow_open';
+break;
+}
+},
+table: [{3:1,4:2,6:3,11:[1,4],12:$V0,13:$V1},{1:[3]},{5:[1,7]},{7:8,8:[1,9],14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc},{6:23,12:$V0,13:$V1},o($Vd,[2,5]),o($Vd,[2,6]),{1:[2,1]},{8:[1,24]},{7:30,8:$Ve,9:25,12:$Vf,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,27:26,29:27,30:28,31:29,33:31,35:$Vg,36:$Vh,42:32,47:$Vi},o([8,10,28,32,37,39,40,45,57,58],[2,7],{15:38,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc}),o($Vj,[2,8]),o($Vj,[2,10]),o($Vj,[2,11]),o($Vj,[2,12]),o($Vj,[2,13]),o($Vj,[2,14]),o($Vj,[2,15]),o($Vj,[2,16]),o($Vj,[2,17]),o($Vj,[2,18]),o($Vj,[2,19]),o($Vj,[2,20]),{7:39,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc},{7:30,8:$Ve,9:40,12:$Vf,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,27:26,29:27,30:28,31:29,33:31,35:$Vg,36:$Vh,42:32,47:$Vi},{10:[1,41]},{10:[2,21],28:[1,42]},o($Vk,[2,23]),o($Vk,[2,24]),o($Vk,[2,25]),o($Vl,$Vm,{44:44,32:[1,43],45:$Vn}),o($Vk,[2,27],{41:46,43:47,57:$Vo,58:$Vp}),o($Vk,[2,47],{43:47,34:50,41:51,37:$Vq,57:$Vo,58:$Vp}),{34:53,37:$Vq},{34:54,37:$Vq},{34:55,37:$Vq},{7:56,8:[1,57],14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc},{7:30,8:$Ve,9:58,12:$Vf,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,27:26,29:27,30:28,31:29,33:31,35:$Vg,36:$Vh,42:32,47:$Vi},o($Vj,[2,9]),{8:[1,59]},{10:[1,60]},{5:[2,4]},{7:30,8:$Ve,9:61,12:$Vf,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,27:26,29:27,30:28,31:29,33:31,35:$Vg,36:$Vh,42:32,47:$Vi},{7:62,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc},o($Vl,[2,48]),o($Vl,$Vr,{14:10,15:11,7:63,46:64,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,48:$Vs,49:$Vt,50:$Vu,51:$Vv,52:$Vw,53:$Vx,54:$Vy,55:$Vz,56:$VA}),o($Vk,[2,41],{34:74,37:$Vq}),{7:77,8:$Ve,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,33:76,42:75,47:$Vi},o($VB,[2,66]),o($VB,[2,67]),o($Vk,[2,46]),o($Vk,[2,40],{34:78,37:$Vq}),{7:81,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,38:79,39:[1,80]},o($Vk,[2,28]),o($Vk,[2,29]),o($Vk,[2,30]),{8:[1,82]},{7:30,8:$Ve,9:83,12:$Vf,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,27:26,29:27,30:28,31:29,33:31,35:$Vg,36:$Vh,42:32,47:$Vi},{10:[1,84]},{7:30,8:$Ve,9:85,12:$Vf,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,27:26,29:27,30:28,31:29,33:31,35:$Vg,36:$Vh,42:32,47:$Vi},{5:[2,2]},{10:[2,22]},o($Vk,[2,26]),o($Vl,[2,51],{45:[1,86]}),o($Vl,[2,52]),o($Vl,[2,56]),o($Vl,[2,57]),o($Vl,[2,58]),o($Vl,[2,59]),o($Vl,[2,60]),o($Vl,[2,61]),o($Vl,[2,62]),o($Vl,[2,63]),o($Vl,[2,64]),o($Vk,[2,38]),o($VC,[2,44],{43:47,41:87,57:$Vo,58:$Vp}),o($VC,[2,45],{43:47,41:88,57:$Vo,58:$Vp}),o($Vl,$Vm,{44:44,45:$Vn}),o($Vk,[2,39]),{39:[1,89]},o($Vk,[2,34],{34:90,37:$Vq}),{32:[1,91]},{7:30,8:$Ve,9:92,12:$Vf,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,27:26,29:27,30:28,31:29,33:31,35:$Vg,36:$Vh,42:32,47:$Vi},{10:[1,93]},o($Vl,[2,55]),{10:[1,94]},o($Vl,$Vr,{46:95,48:$Vs,49:$Vt,50:$Vu,51:$Vv,52:$Vw,53:$Vx,54:$Vy,55:$Vz,56:$VA}),o($VC,[2,42]),o($VC,[2,43]),o($Vk,[2,33],{34:96,37:$Vq}),o($Vk,[2,32]),{7:97,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc},{10:[1,98]},o($Vl,[2,54]),{5:[2,3]},o($Vl,[2,50]),o($Vk,[2,31]),{28:[1,99],39:[2,37],40:[1,100]},o($Vl,[2,53]),{7:81,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,38:101},{7:81,14:10,15:11,16:$V2,17:$V3,18:$V4,19:$V5,20:$V6,21:$V7,22:$V8,23:$V9,24:$Va,25:$Vb,26:$Vc,38:102},{39:[2,35]},{39:[2,36]}],
+defaultActions: {7:[2,1],41:[2,4],60:[2,2],61:[2,22],94:[2,3],101:[2,35],102:[2,36]},
+parseError: function parseError(str, hash) {
+    if (hash.recoverable) {
+        this.trace(str);
+    } else {
+        function _parseError (msg, hash) {
+            this.message = msg;
+            this.hash = hash;
+        }
+        _parseError.prototype = new Error();
 
-                    break;
-                case 44:
-
-                    this.$ = { op: $$[$0 - 1], id: $$[$0] };
-
-                    break;
-                case 48:
-                    yy.addVertex($$[$0 - 1]);this.$ = $$[$0 - 1];
-                    break;
-                case 49:
-                    yy.addVertex($$[$0]);this.$ = $$[$0];
-                    break;
-                case 66:
-                    this.$ = 'arrow';
-                    break;
-                case 67:
-                    this.$ = 'arrow_open';
-                    break;
+        throw new _parseError(str, hash);
+    }
+},
+parse: function parse(input) {
+    var self = this, stack = [0], tstack = [], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, recovering = 0, TERROR = 2, EOF = 1;
+    var args = lstack.slice.call(arguments, 1);
+    var lexer = Object.create(this.lexer);
+    var sharedState = { yy: {} };
+    for (var k in this.yy) {
+        if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
+            sharedState.yy[k] = this.yy[k];
+        }
+    }
+    lexer.setInput(input, sharedState.yy);
+    sharedState.yy.lexer = lexer;
+    sharedState.yy.parser = this;
+    if (typeof lexer.yylloc == 'undefined') {
+        lexer.yylloc = {};
+    }
+    var yyloc = lexer.yylloc;
+    lstack.push(yyloc);
+    var ranges = lexer.options && lexer.options.ranges;
+    if (typeof sharedState.yy.parseError === 'function') {
+        this.parseError = sharedState.yy.parseError;
+    } else {
+        this.parseError = Object.getPrototypeOf(this).parseError;
+    }
+    function popStack(n) {
+        stack.length = stack.length - 2 * n;
+        vstack.length = vstack.length - n;
+        lstack.length = lstack.length - n;
+    }
+    _token_stack:
+        var lex = function () {
+            var token;
+            token = lexer.lex() || EOF;
+            if (typeof token !== 'number') {
+                token = self.symbols_[token] || token;
             }
-        },
-        table: [{ 3: 1, 4: 2, 6: 3, 11: [1, 4], 12: $V0, 13: $V1 }, { 1: [3] }, { 5: [1, 7] }, { 7: 8, 8: [1, 9], 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc }, { 6: 23, 12: $V0, 13: $V1 }, o($Vd, [2, 5]), o($Vd, [2, 6]), { 1: [2, 1] }, { 8: [1, 24] }, { 7: 30, 8: $Ve, 9: 25, 12: $Vf, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 27: 26, 29: 27, 30: 28, 31: 29, 33: 31, 35: $Vg, 36: $Vh, 42: 32, 47: $Vi }, o([8, 10, 28, 32, 37, 39, 40, 45, 57, 58], [2, 7], { 15: 38, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc }), o($Vj, [2, 8]), o($Vj, [2, 10]), o($Vj, [2, 11]), o($Vj, [2, 12]), o($Vj, [2, 13]), o($Vj, [2, 14]), o($Vj, [2, 15]), o($Vj, [2, 16]), o($Vj, [2, 17]), o($Vj, [2, 18]), o($Vj, [2, 19]), o($Vj, [2, 20]), { 7: 39, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc }, { 7: 30, 8: $Ve, 9: 40, 12: $Vf, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 27: 26, 29: 27, 30: 28, 31: 29, 33: 31, 35: $Vg, 36: $Vh, 42: 32, 47: $Vi }, { 10: [1, 41] }, { 10: [2, 21], 28: [1, 42] }, o($Vk, [2, 23]), o($Vk, [2, 24]), o($Vk, [2, 25]), o($Vl, $Vm, { 44: 44, 32: [1, 43], 45: $Vn }), o($Vk, [2, 27], { 41: 46, 43: 47, 57: $Vo, 58: $Vp }), o($Vk, [2, 47], { 43: 47, 34: 50, 41: 51, 37: $Vq, 57: $Vo, 58: $Vp }), { 34: 53, 37: $Vq }, { 34: 54, 37: $Vq }, { 34: 55, 37: $Vq }, { 7: 56, 8: [1, 57], 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc }, { 7: 30, 8: $Ve, 9: 58, 12: $Vf, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 27: 26, 29: 27, 30: 28, 31: 29, 33: 31, 35: $Vg, 36: $Vh, 42: 32, 47: $Vi }, o($Vj, [2, 9]), { 8: [1, 59] }, { 10: [1, 60] }, { 5: [2, 4] }, { 7: 30, 8: $Ve, 9: 61, 12: $Vf, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 27: 26, 29: 27, 30: 28, 31: 29, 33: 31, 35: $Vg, 36: $Vh, 42: 32, 47: $Vi }, { 7: 62, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc }, o($Vl, [2, 48]), o($Vl, $Vr, { 14: 10, 15: 11, 7: 63, 46: 64, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 48: $Vs, 49: $Vt, 50: $Vu, 51: $Vv, 52: $Vw, 53: $Vx, 54: $Vy, 55: $Vz, 56: $VA }), o($Vk, [2, 41], { 34: 74, 37: $Vq }), { 7: 77, 8: $Ve, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 33: 76, 42: 75, 47: $Vi }, o($VB, [2, 66]), o($VB, [2, 67]), o($Vk, [2, 46]), o($Vk, [2, 40], { 34: 78, 37: $Vq }), { 7: 81, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 38: 79, 39: [1, 80] }, o($Vk, [2, 28]), o($Vk, [2, 29]), o($Vk, [2, 30]), { 8: [1, 82] }, { 7: 30, 8: $Ve, 9: 83, 12: $Vf, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 27: 26, 29: 27, 30: 28, 31: 29, 33: 31, 35: $Vg, 36: $Vh, 42: 32, 47: $Vi }, { 10: [1, 84] }, { 7: 30, 8: $Ve, 9: 85, 12: $Vf, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 27: 26, 29: 27, 30: 28, 31: 29, 33: 31, 35: $Vg, 36: $Vh, 42: 32, 47: $Vi }, { 5: [2, 2] }, { 10: [2, 22] }, o($Vk, [2, 26]), o($Vl, [2, 51], { 45: [1, 86] }), o($Vl, [2, 52]), o($Vl, [2, 56]), o($Vl, [2, 57]), o($Vl, [2, 58]), o($Vl, [2, 59]), o($Vl, [2, 60]), o($Vl, [2, 61]), o($Vl, [2, 62]), o($Vl, [2, 63]), o($Vl, [2, 64]), o($Vk, [2, 38]), o($VC, [2, 44], { 43: 47, 41: 87, 57: $Vo, 58: $Vp }), o($VC, [2, 45], { 43: 47, 41: 88, 57: $Vo, 58: $Vp }), o($Vl, $Vm, { 44: 44, 45: $Vn }), o($Vk, [2, 39]), { 39: [1, 89] }, o($Vk, [2, 34], { 34: 90, 37: $Vq }), { 32: [1, 91] }, { 7: 30, 8: $Ve, 9: 92, 12: $Vf, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 27: 26, 29: 27, 30: 28, 31: 29, 33: 31, 35: $Vg, 36: $Vh, 42: 32, 47: $Vi }, { 10: [1, 93] }, o($Vl, [2, 55]), { 10: [1, 94] }, o($Vl, $Vr, { 46: 95, 48: $Vs, 49: $Vt, 50: $Vu, 51: $Vv, 52: $Vw, 53: $Vx, 54: $Vy, 55: $Vz, 56: $VA }), o($VC, [2, 42]), o($VC, [2, 43]), o($Vk, [2, 33], { 34: 96, 37: $Vq }), o($Vk, [2, 32]), { 7: 97, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc }, { 10: [1, 98] }, o($Vl, [2, 54]), { 5: [2, 3] }, o($Vl, [2, 50]), o($Vk, [2, 31]), { 28: [1, 99], 39: [2, 37], 40: [1, 100] }, o($Vl, [2, 53]), { 7: 81, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 38: 101 }, { 7: 81, 14: 10, 15: 11, 16: $V2, 17: $V3, 18: $V4, 19: $V5, 20: $V6, 21: $V7, 22: $V8, 23: $V9, 24: $Va, 25: $Vb, 26: $Vc, 38: 102 }, { 39: [2, 35] }, { 39: [2, 36] }],
-        defaultActions: { 7: [2, 1], 41: [2, 4], 60: [2, 2], 61: [2, 22], 94: [2, 3], 101: [2, 35], 102: [2, 36] },
-        parseError: function parseError(str, hash) {
-            if (hash.recoverable) {
-                this.trace(str);
-            } else {
-                var _parseError = function _parseError(msg, hash) {
-                    this.message = msg;
-                    this.hash = hash;
-                };
-
-                _parseError.prototype = new Error();
-
-                throw new _parseError(str, hash);
+            return token;
+        };
+    var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
+    while (true) {
+        state = stack[stack.length - 1];
+        if (this.defaultActions[state]) {
+            action = this.defaultActions[state];
+        } else {
+            if (symbol === null || typeof symbol == 'undefined') {
+                symbol = lex();
             }
-        },
-        parse: function parse(input) {
-            var self = this,
-                stack = [0],
-                tstack = [],
-                vstack = [null],
-                lstack = [],
-                table = this.table,
-                yytext = '',
-                yylineno = 0,
-                yyleng = 0,
-                recovering = 0,
-                TERROR = 2,
-                EOF = 1;
-            var args = lstack.slice.call(arguments, 1);
-            var lexer = Object.create(this.lexer);
-            var sharedState = { yy: {} };
-            for (var k in this.yy) {
-                if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
-                    sharedState.yy[k] = this.yy[k];
+            action = table[state] && table[state][symbol];
+        }
+                    if (typeof action === 'undefined' || !action.length || !action[0]) {
+                var errStr = '';
+                expected = [];
+                for (p in table[state]) {
+                    if (this.terminals_[p] && p > TERROR) {
+                        expected.push('\'' + this.terminals_[p] + '\'');
+                    }
                 }
-            }
-            lexer.setInput(input, sharedState.yy);
-            sharedState.yy.lexer = lexer;
-            sharedState.yy.parser = this;
-            if (typeof lexer.yylloc == 'undefined') {
-                lexer.yylloc = {};
-            }
-            var yyloc = lexer.yylloc;
-            lstack.push(yyloc);
-            var ranges = lexer.options && lexer.options.ranges;
-            if (typeof sharedState.yy.parseError === 'function') {
-                this.parseError = sharedState.yy.parseError;
-            } else {
-                this.parseError = Object.getPrototypeOf(this).parseError;
-            }
-            function popStack(n) {
-                stack.length = stack.length - 2 * n;
-                vstack.length = vstack.length - n;
-                lstack.length = lstack.length - n;
-            }
-            _token_stack: var lex = function lex() {
-                var token;
-                token = lexer.lex() || EOF;
-                if (typeof token !== 'number') {
-                    token = self.symbols_[token] || token;
+                if (lexer.showPosition) {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
+                } else {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
                 }
-                return token;
+                this.parseError(errStr, {
+                    text: lexer.match,
+                    token: this.terminals_[symbol] || symbol,
+                    line: lexer.yylineno,
+                    loc: yyloc,
+                    expected: expected
+                });
+            }
+        if (action[0] instanceof Array && action.length > 1) {
+            throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
+        }
+        switch (action[0]) {
+        case 1:
+            stack.push(symbol);
+            vstack.push(lexer.yytext);
+            lstack.push(lexer.yylloc);
+            stack.push(action[1]);
+            symbol = null;
+            if (!preErrorSymbol) {
+                yyleng = lexer.yyleng;
+                yytext = lexer.yytext;
+                yylineno = lexer.yylineno;
+                yyloc = lexer.yylloc;
+                if (recovering > 0) {
+                    recovering--;
+                }
+            } else {
+                symbol = preErrorSymbol;
+                preErrorSymbol = null;
+            }
+            break;
+        case 2:
+            len = this.productions_[action[1]][1];
+            yyval.$ = vstack[vstack.length - len];
+            yyval._$ = {
+                first_line: lstack[lstack.length - (len || 1)].first_line,
+                last_line: lstack[lstack.length - 1].last_line,
+                first_column: lstack[lstack.length - (len || 1)].first_column,
+                last_column: lstack[lstack.length - 1].last_column
             };
-            var symbol,
-                preErrorSymbol,
-                state,
-                action,
-                a,
-                r,
-                yyval = {},
-                p,
-                len,
-                newState,
-                expected;
-            while (true) {
-                state = stack[stack.length - 1];
-                if (this.defaultActions[state]) {
-                    action = this.defaultActions[state];
-                } else {
-                    if (symbol === null || typeof symbol == 'undefined') {
-                        symbol = lex();
-                    }
-                    action = table[state] && table[state][symbol];
-                }
-                if (typeof action === 'undefined' || !action.length || !action[0]) {
-                    var errStr = '';
-                    expected = [];
-                    for (p in table[state]) {
-                        if (this.terminals_[p] && p > TERROR) {
-                            expected.push('\'' + this.terminals_[p] + '\'');
-                        }
-                    }
-                    if (lexer.showPosition) {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
-                    } else {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
-                    }
-                    this.parseError(errStr, {
-                        text: lexer.match,
-                        token: this.terminals_[symbol] || symbol,
-                        line: lexer.yylineno,
-                        loc: yyloc,
-                        expected: expected
-                    });
-                }
-                if (action[0] instanceof Array && action.length > 1) {
-                    throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
-                }
-                switch (action[0]) {
-                    case 1:
-                        stack.push(symbol);
-                        vstack.push(lexer.yytext);
-                        lstack.push(lexer.yylloc);
-                        stack.push(action[1]);
-                        symbol = null;
-                        if (!preErrorSymbol) {
-                            yyleng = lexer.yyleng;
-                            yytext = lexer.yytext;
-                            yylineno = lexer.yylineno;
-                            yyloc = lexer.yylloc;
-                            if (recovering > 0) {
-                                recovering--;
-                            }
-                        } else {
-                            symbol = preErrorSymbol;
-                            preErrorSymbol = null;
-                        }
-                        break;
-                    case 2:
-                        len = this.productions_[action[1]][1];
-                        yyval.$ = vstack[vstack.length - len];
-                        yyval._$ = {
-                            first_line: lstack[lstack.length - (len || 1)].first_line,
-                            last_line: lstack[lstack.length - 1].last_line,
-                            first_column: lstack[lstack.length - (len || 1)].first_column,
-                            last_column: lstack[lstack.length - 1].last_column
-                        };
-                        if (ranges) {
-                            yyval._$.range = [lstack[lstack.length - (len || 1)].range[0], lstack[lstack.length - 1].range[1]];
-                        }
-                        r = this.performAction.apply(yyval, [yytext, yyleng, yylineno, sharedState.yy, action[1], vstack, lstack].concat(args));
-                        if (typeof r !== 'undefined') {
-                            return r;
-                        }
-                        if (len) {
-                            stack = stack.slice(0, -1 * len * 2);
-                            vstack = vstack.slice(0, -1 * len);
-                            lstack = lstack.slice(0, -1 * len);
-                        }
-                        stack.push(this.productions_[action[1]][0]);
-                        vstack.push(yyval.$);
-                        lstack.push(yyval._$);
-                        newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
-                        stack.push(newState);
-                        break;
-                    case 3:
-                        return true;
-                }
+            if (ranges) {
+                yyval._$.range = [
+                    lstack[lstack.length - (len || 1)].range[0],
+                    lstack[lstack.length - 1].range[1]
+                ];
             }
+            r = this.performAction.apply(yyval, [
+                yytext,
+                yyleng,
+                yylineno,
+                sharedState.yy,
+                action[1],
+                vstack,
+                lstack
+            ].concat(args));
+            if (typeof r !== 'undefined') {
+                return r;
+            }
+            if (len) {
+                stack = stack.slice(0, -1 * len * 2);
+                vstack = vstack.slice(0, -1 * len);
+                lstack = lstack.slice(0, -1 * len);
+            }
+            stack.push(this.productions_[action[1]][0]);
+            vstack.push(yyval.$);
+            lstack.push(yyval._$);
+            newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
+            stack.push(newState);
+            break;
+        case 3:
             return true;
-        } };
+        }
+    }
+    return true;
+}};
 
-    /* generated by jison-lex 0.3.4 */
-    var lexer = (function () {
-        var lexer = {
+/* generated by jison-lex 0.3.4 */
+var lexer = (function(){
+var lexer = ({
 
-            EOF: 1,
+EOF:1,
 
-            parseError: function parseError(str, hash) {
-                if (this.yy.parser) {
-                    this.yy.parser.parseError(str, hash);
-                } else {
-                    throw new Error(str);
-                }
-            },
+parseError:function parseError(str, hash) {
+        if (this.yy.parser) {
+            this.yy.parser.parseError(str, hash);
+        } else {
+            throw new Error(str);
+        }
+    },
 
-            // resets the lexer, sets new input
-            setInput: function setInput(input, yy) {
-                this.yy = yy || this.yy || {};
-                this._input = input;
-                this._more = this._backtrack = this.done = false;
-                this.yylineno = this.yyleng = 0;
-                this.yytext = this.matched = this.match = '';
-                this.conditionStack = ['INITIAL'];
-                this.yylloc = {
-                    first_line: 1,
-                    first_column: 0,
-                    last_line: 1,
-                    last_column: 0
-                };
-                if (this.options.ranges) {
-                    this.yylloc.range = [0, 0];
-                }
-                this.offset = 0;
-                return this;
-            },
+// resets the lexer, sets new input
+setInput:function (input, yy) {
+        this.yy = yy || this.yy || {};
+        this._input = input;
+        this._more = this._backtrack = this.done = false;
+        this.yylineno = this.yyleng = 0;
+        this.yytext = this.matched = this.match = '';
+        this.conditionStack = ['INITIAL'];
+        this.yylloc = {
+            first_line: 1,
+            first_column: 0,
+            last_line: 1,
+            last_column: 0
+        };
+        if (this.options.ranges) {
+            this.yylloc.range = [0,0];
+        }
+        this.offset = 0;
+        return this;
+    },
 
-            // consumes and returns one char from the input
-            input: function input() {
-                var ch = this._input[0];
-                this.yytext += ch;
-                this.yyleng++;
-                this.offset++;
-                this.match += ch;
-                this.matched += ch;
-                var lines = ch.match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno++;
-                    this.yylloc.last_line++;
-                } else {
-                    this.yylloc.last_column++;
-                }
-                if (this.options.ranges) {
-                    this.yylloc.range[1]++;
-                }
+// consumes and returns one char from the input
+input:function () {
+        var ch = this._input[0];
+        this.yytext += ch;
+        this.yyleng++;
+        this.offset++;
+        this.match += ch;
+        this.matched += ch;
+        var lines = ch.match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno++;
+            this.yylloc.last_line++;
+        } else {
+            this.yylloc.last_column++;
+        }
+        if (this.options.ranges) {
+            this.yylloc.range[1]++;
+        }
 
-                this._input = this._input.slice(1);
-                return ch;
-            },
+        this._input = this._input.slice(1);
+        return ch;
+    },
 
-            // unshifts one char (or a string) into the input
-            unput: function unput(ch) {
-                var len = ch.length;
-                var lines = ch.split(/(?:\r\n?|\n)/g);
+// unshifts one char (or a string) into the input
+unput:function (ch) {
+        var len = ch.length;
+        var lines = ch.split(/(?:\r\n?|\n)/g);
 
-                this._input = ch + this._input;
-                this.yytext = this.yytext.substr(0, this.yytext.length - len);
-                //this.yyleng -= len;
-                this.offset -= len;
-                var oldLines = this.match.split(/(?:\r\n?|\n)/g);
-                this.match = this.match.substr(0, this.match.length - 1);
-                this.matched = this.matched.substr(0, this.matched.length - 1);
+        this._input = ch + this._input;
+        this.yytext = this.yytext.substr(0, this.yytext.length - len);
+        //this.yyleng -= len;
+        this.offset -= len;
+        var oldLines = this.match.split(/(?:\r\n?|\n)/g);
+        this.match = this.match.substr(0, this.match.length - 1);
+        this.matched = this.matched.substr(0, this.matched.length - 1);
 
-                if (lines.length - 1) {
-                    this.yylineno -= lines.length - 1;
-                }
-                var r = this.yylloc.range;
+        if (lines.length - 1) {
+            this.yylineno -= lines.length - 1;
+        }
+        var r = this.yylloc.range;
 
-                this.yylloc = {
+        this.yylloc = {
+            first_line: this.yylloc.first_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.first_column,
+            last_column: lines ?
+                (lines.length === oldLines.length ? this.yylloc.first_column : 0)
+                 + oldLines[oldLines.length - lines.length].length - lines[0].length :
+              this.yylloc.first_column - len
+        };
+
+        if (this.options.ranges) {
+            this.yylloc.range = [r[0], r[0] + this.yyleng - len];
+        }
+        this.yyleng = this.yytext.length;
+        return this;
+    },
+
+// When called from action, caches matched text and appends it on next action
+more:function () {
+        this._more = true;
+        return this;
+    },
+
+// When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
+reject:function () {
+        if (this.options.backtrack_lexer) {
+            this._backtrack = true;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+
+        }
+        return this;
+    },
+
+// retain first n characters of the match
+less:function (n) {
+        this.unput(this.match.slice(n));
+    },
+
+// displays already matched input, i.e. for error messages
+pastInput:function () {
+        var past = this.matched.substr(0, this.matched.length - this.match.length);
+        return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
+    },
+
+// displays upcoming input, i.e. for error messages
+upcomingInput:function () {
+        var next = this.match;
+        if (next.length < 20) {
+            next += this._input.substr(0, 20-next.length);
+        }
+        return (next.substr(0,20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
+    },
+
+// displays the character position where the lexing error occurred, i.e. for error messages
+showPosition:function () {
+        var pre = this.pastInput();
+        var c = new Array(pre.length + 1).join("-");
+        return pre + this.upcomingInput() + "\n" + c + "^";
+    },
+
+// test the lexed token: return FALSE when not a match, otherwise return token
+test_match:function (match, indexed_rule) {
+        var token,
+            lines,
+            backup;
+
+        if (this.options.backtrack_lexer) {
+            // save context
+            backup = {
+                yylineno: this.yylineno,
+                yylloc: {
                     first_line: this.yylloc.first_line,
-                    last_line: this.yylineno + 1,
+                    last_line: this.last_line,
                     first_column: this.yylloc.first_column,
-                    last_column: lines ? (lines.length === oldLines.length ? this.yylloc.first_column : 0) + oldLines[oldLines.length - lines.length].length - lines[0].length : this.yylloc.first_column - len
-                };
+                    last_column: this.yylloc.last_column
+                },
+                yytext: this.yytext,
+                match: this.match,
+                matches: this.matches,
+                matched: this.matched,
+                yyleng: this.yyleng,
+                offset: this.offset,
+                _more: this._more,
+                _input: this._input,
+                yy: this.yy,
+                conditionStack: this.conditionStack.slice(0),
+                done: this.done
+            };
+            if (this.options.ranges) {
+                backup.yylloc.range = this.yylloc.range.slice(0);
+            }
+        }
 
-                if (this.options.ranges) {
-                    this.yylloc.range = [r[0], r[0] + this.yyleng - len];
-                }
-                this.yyleng = this.yytext.length;
-                return this;
-            },
+        lines = match[0].match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno += lines.length;
+        }
+        this.yylloc = {
+            first_line: this.yylloc.last_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.last_column,
+            last_column: lines ?
+                         lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length :
+                         this.yylloc.last_column + match[0].length
+        };
+        this.yytext += match[0];
+        this.match += match[0];
+        this.matches = match;
+        this.yyleng = this.yytext.length;
+        if (this.options.ranges) {
+            this.yylloc.range = [this.offset, this.offset += this.yyleng];
+        }
+        this._more = false;
+        this._backtrack = false;
+        this._input = this._input.slice(match[0].length);
+        this.matched += match[0];
+        token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
+        if (this.done && this._input) {
+            this.done = false;
+        }
+        if (token) {
+            return token;
+        } else if (this._backtrack) {
+            // recover context
+            for (var k in backup) {
+                this[k] = backup[k];
+            }
+            return false; // rule action called reject() implying the next rule should be tested instead.
+        }
+        return false;
+    },
 
-            // When called from action, caches matched text and appends it on next action
-            more: function more() {
-                this._more = true;
-                return this;
-            },
+// return next match in input
+next:function () {
+        if (this.done) {
+            return this.EOF;
+        }
+        if (!this._input) {
+            this.done = true;
+        }
 
-            // When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
-            reject: function reject() {
+        var token,
+            match,
+            tempMatch,
+            index;
+        if (!this._more) {
+            this.yytext = '';
+            this.match = '';
+        }
+        var rules = this._currentRules();
+        for (var i = 0; i < rules.length; i++) {
+            tempMatch = this._input.match(this.rules[rules[i]]);
+            if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
+                match = tempMatch;
+                index = i;
                 if (this.options.backtrack_lexer) {
-                    this._backtrack = true;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-                return this;
-            },
-
-            // retain first n characters of the match
-            less: function less(n) {
-                this.unput(this.match.slice(n));
-            },
-
-            // displays already matched input, i.e. for error messages
-            pastInput: function pastInput() {
-                var past = this.matched.substr(0, this.matched.length - this.match.length);
-                return (past.length > 20 ? '...' : '') + past.substr(-20).replace(/\n/g, "");
-            },
-
-            // displays upcoming input, i.e. for error messages
-            upcomingInput: function upcomingInput() {
-                var next = this.match;
-                if (next.length < 20) {
-                    next += this._input.substr(0, 20 - next.length);
-                }
-                return (next.substr(0, 20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
-            },
-
-            // displays the character position where the lexing error occurred, i.e. for error messages
-            showPosition: function showPosition() {
-                var pre = this.pastInput();
-                var c = new Array(pre.length + 1).join("-");
-                return pre + this.upcomingInput() + "\n" + c + "^";
-            },
-
-            // test the lexed token: return FALSE when not a match, otherwise return token
-            test_match: function test_match(match, indexed_rule) {
-                var token, lines, backup;
-
-                if (this.options.backtrack_lexer) {
-                    // save context
-                    backup = {
-                        yylineno: this.yylineno,
-                        yylloc: {
-                            first_line: this.yylloc.first_line,
-                            last_line: this.last_line,
-                            first_column: this.yylloc.first_column,
-                            last_column: this.yylloc.last_column
-                        },
-                        yytext: this.yytext,
-                        match: this.match,
-                        matches: this.matches,
-                        matched: this.matched,
-                        yyleng: this.yyleng,
-                        offset: this.offset,
-                        _more: this._more,
-                        _input: this._input,
-                        yy: this.yy,
-                        conditionStack: this.conditionStack.slice(0),
-                        done: this.done
-                    };
-                    if (this.options.ranges) {
-                        backup.yylloc.range = this.yylloc.range.slice(0);
-                    }
-                }
-
-                lines = match[0].match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno += lines.length;
-                }
-                this.yylloc = {
-                    first_line: this.yylloc.last_line,
-                    last_line: this.yylineno + 1,
-                    first_column: this.yylloc.last_column,
-                    last_column: lines ? lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length : this.yylloc.last_column + match[0].length
-                };
-                this.yytext += match[0];
-                this.match += match[0];
-                this.matches = match;
-                this.yyleng = this.yytext.length;
-                if (this.options.ranges) {
-                    this.yylloc.range = [this.offset, this.offset += this.yyleng];
-                }
-                this._more = false;
-                this._backtrack = false;
-                this._input = this._input.slice(match[0].length);
-                this.matched += match[0];
-                token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
-                if (this.done && this._input) {
-                    this.done = false;
-                }
-                if (token) {
-                    return token;
-                } else if (this._backtrack) {
-                    // recover context
-                    for (var k in backup) {
-                        this[k] = backup[k];
-                    }
-                    return false; // rule action called reject() implying the next rule should be tested instead.
-                }
-                return false;
-            },
-
-            // return next match in input
-            next: function next() {
-                if (this.done) {
-                    return this.EOF;
-                }
-                if (!this._input) {
-                    this.done = true;
-                }
-
-                var token, match, tempMatch, index;
-                if (!this._more) {
-                    this.yytext = '';
-                    this.match = '';
-                }
-                var rules = this._currentRules();
-                for (var i = 0; i < rules.length; i++) {
-                    tempMatch = this._input.match(this.rules[rules[i]]);
-                    if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
-                        match = tempMatch;
-                        index = i;
-                        if (this.options.backtrack_lexer) {
-                            token = this.test_match(tempMatch, rules[i]);
-                            if (token !== false) {
-                                return token;
-                            } else if (this._backtrack) {
-                                match = false;
-                                continue; // rule action called reject() implying a rule MISmatch.
-                            } else {
-                                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                                    return false;
-                                }
-                        } else if (!this.options.flex) {
-                            break;
-                        }
-                    }
-                }
-                if (match) {
-                    token = this.test_match(match, rules[index]);
+                    token = this.test_match(tempMatch, rules[i]);
                     if (token !== false) {
                         return token;
+                    } else if (this._backtrack) {
+                        match = false;
+                        continue; // rule action called reject() implying a rule MISmatch.
+                    } else {
+                        // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+                        return false;
                     }
-                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                    return false;
+                } else if (!this.options.flex) {
+                    break;
                 }
-                if (this._input === "") {
-                    return this.EOF;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-            },
+            }
+        }
+        if (match) {
+            token = this.test_match(match, rules[index]);
+            if (token !== false) {
+                return token;
+            }
+            // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+            return false;
+        }
+        if (this._input === "") {
+            return this.EOF;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+        }
+    },
 
-            // return next match that has a token
-            lex: function lex() {
-                var r = this.next();
-                if (r) {
-                    return r;
-                } else {
-                    return this.lex();
-                }
-            },
+// return next match that has a token
+lex:function lex() {
+        var r = this.next();
+        if (r) {
+            return r;
+        } else {
+            return this.lex();
+        }
+    },
 
-            // activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
-            begin: function begin(condition) {
-                this.conditionStack.push(condition);
-            },
+// activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
+begin:function begin(condition) {
+        this.conditionStack.push(condition);
+    },
 
-            // pop the previously active lexer condition state off the condition stack
-            popState: function popState() {
-                var n = this.conditionStack.length - 1;
-                if (n > 0) {
-                    return this.conditionStack.pop();
-                } else {
-                    return this.conditionStack[0];
-                }
-            },
+// pop the previously active lexer condition state off the condition stack
+popState:function popState() {
+        var n = this.conditionStack.length - 1;
+        if (n > 0) {
+            return this.conditionStack.pop();
+        } else {
+            return this.conditionStack[0];
+        }
+    },
 
-            // produce the lexer rule set which is active for the currently active lexer condition state
-            _currentRules: function _currentRules() {
-                if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
-                    return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
-                } else {
-                    return this.conditions["INITIAL"].rules;
-                }
-            },
+// produce the lexer rule set which is active for the currently active lexer condition state
+_currentRules:function _currentRules() {
+        if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
+            return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
+        } else {
+            return this.conditions["INITIAL"].rules;
+        }
+    },
 
-            // return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
-            topState: function topState(n) {
-                n = this.conditionStack.length - 1 - Math.abs(n || 0);
-                if (n >= 0) {
-                    return this.conditionStack[n];
-                } else {
-                    return "INITIAL";
-                }
-            },
+// return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
+topState:function topState(n) {
+        n = this.conditionStack.length - 1 - Math.abs(n || 0);
+        if (n >= 0) {
+            return this.conditionStack[n];
+        } else {
+            return "INITIAL";
+        }
+    },
 
-            // alias for begin(condition)
-            pushState: function pushState(condition) {
-                this.begin(condition);
-            },
+// alias for begin(condition)
+pushState:function pushState(condition) {
+        this.begin(condition);
+    },
 
-            // return the number of states currently on the stack
-            stateStackSize: function stateStackSize() {
-                return this.conditionStack.length;
-            },
-            options: {},
-            performAction: function anonymous(yy, yy_, $avoiding_name_collisions, YY_START) {
-                var YYSTATE = YY_START;
-                switch ($avoiding_name_collisions) {
-                    case 0:
-                        return 'STYLE';
-                        break;
-                    case 1:
-                        return 'LINKSTYLE';
-                        break;
-                    case 2:
-                        return 'CLASSDEF';
-                        break;
-                    case 3:
-                        return 'CLASS';
-                        break;
-                    case 4:
-                        return 'CLICK';
-                        break;
-                    case 5:
-                        return 12;
-                        break;
-                    case 6:
-                        return 13;
-                        break;
-                    case 7:
-                        return 47;
-                        break;
-                    case 8:
-                        return 35;
-                        break;
-                    case 9:
-                        return 36;
-                        break;
-                    case 10:
-                        return 'DIR';
-                        break;
-                    case 11:
-                        return 'DIR';
-                        break;
-                    case 12:
-                        return 'DIR';
-                        break;
-                    case 13:
-                        return 'DIR';
-                        break;
-                    case 14:
-                        return 'DIR';
-                        break;
-                    case 15:
-                        return 'DIR';
-                        break;
-                    case 16:
-                        return 17;
-                        break;
-                    case 17:
-                        return 23;
-                        break;
-                    case 18:
-                        return 18;
-                        break;
-                    case 19:
-                        return 28;
-                        break;
-                    case 20:
-                        return 40;
-                        break;
-                    case 21:
-                        return 32;
-                        break;
-                    case 22:
-                        return 21;
-                        break;
-                    case 23:
-                        return 22;
-                        break;
-                    case 24:
-                        return 'ARROW_CROSS';
-                        break;
-                    case 25:
-                        return 57;
-                        break;
-                    case 26:
-                        return 'ARROW_CIRCLE';
-                        break;
-                    case 27:
-                        return 58;
-                        break;
-                    case 28:
-                        return 25;
-                        break;
-                    case 29:
-                        return 19;
-                        break;
-                    case 30:
-                        return 20;
-                        break;
-                    case 31:
-                        return 16;
-                        break;
-                    case 32:
-                        return 'PIPE';
-                        break;
-                    case 33:
-                        return 'PS';
-                        break;
-                    case 34:
-                        return 'PE';
-                        break;
-                    case 35:
-                        return 37;
-                        break;
-                    case 36:
-                        return 39;
-                        break;
-                    case 37:
-                        return 8;
-                        break;
-                    case 38:
-                        return 10;
-                        break;
-                    case 39:
-                        return 'QUOTE';
-                        break;
-                    case 40:
-                        return 24;
-                        break;
-                    case 41:
-                        return 'NEWLINE';
-                        break;
-                    case 42:
-                        return 5;
-                        break;
-                }
-            },
-            rules: [/^(?:style\b)/, /^(?:linkStyle\b)/, /^(?:classDef\b)/, /^(?:class\b)/, /^(?:click\b)/, /^(?:graph\b)/, /^(?:digraph\b)/, /^(?:subgraph\b)/, /^(?:node\b)/, /^(?:edge\b)/, /^(?:LR\b)/, /^(?:RL\b)/, /^(?:TB\b)/, /^(?:BT\b)/, /^(?:TD\b)/, /^(?:BR\b)/, /^(?:[0-9])/, /^(?:#)/, /^(?::)/, /^(?:;)/, /^(?:,)/, /^(?:=)/, /^(?:\*)/, /^(?:\.)/, /^(?:--[x])/, /^(?:->)/, /^(?:--[o])/, /^(?:--)/, /^(?:-)/, /^(?:\+)/, /^(?:=)/, /^(?:[\u0021-\u0027\u002A-\u002E\u003F\u0041-\u005A\u0061-\u007A\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6]|[\u00F8-\u02C1\u02C6-\u02D1\u02E0-\u02E4\u02EC\u02EE\u0370-\u0374\u0376\u0377]|[\u037A-\u037D\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03F5]|[\u03F7-\u0481\u048A-\u0527\u0531-\u0556\u0559\u0561-\u0587\u05D0-\u05EA]|[\u05F0-\u05F2\u0620-\u064A\u066E\u066F\u0671-\u06D3\u06D5\u06E5\u06E6\u06EE]|[\u06EF\u06FA-\u06FC\u06FF\u0710\u0712-\u072F\u074D-\u07A5\u07B1\u07CA-\u07EA]|[\u07F4\u07F5\u07FA\u0800-\u0815\u081A\u0824\u0828\u0840-\u0858\u08A0]|[\u08A2-\u08AC\u0904-\u0939\u093D\u0950\u0958-\u0961\u0971-\u0977]|[\u0979-\u097F\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2]|[\u09B6-\u09B9\u09BD\u09CE\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A]|[\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39]|[\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8]|[\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AD0\u0AE0\u0AE1\u0B05-\u0B0C]|[\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B35-\u0B39\u0B3D\u0B5C]|[\u0B5D\u0B5F-\u0B61\u0B71\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99]|[\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB9\u0BD0]|[\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3D]|[\u0C58\u0C59\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3]|[\u0CB5-\u0CB9\u0CBD\u0CDE\u0CE0\u0CE1\u0CF1\u0CF2\u0D05-\u0D0C\u0D0E-\u0D10]|[\u0D12-\u0D3A\u0D3D\u0D4E\u0D60\u0D61\u0D7A-\u0D7F\u0D85-\u0D96\u0D9A-\u0DB1]|[\u0DB3-\u0DBB\u0DBD\u0DC0-\u0DC6\u0E01-\u0E30\u0E32\u0E33\u0E40-\u0E46\u0E81]|[\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3]|[\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD-\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0EC6]|[\u0EDC-\u0EDF\u0F00\u0F40-\u0F47\u0F49-\u0F6C\u0F88-\u0F8C\u1000-\u102A]|[\u103F\u1050-\u1055\u105A-\u105D\u1061\u1065\u1066\u106E-\u1070\u1075-\u1081]|[\u108E\u10A0-\u10C5\u10C7\u10CD\u10D0-\u10FA\u10FC-\u1248\u124A-\u124D]|[\u1250-\u1256\u1258\u125A-\u125D\u1260-\u1288\u128A-\u128D\u1290-\u12B0]|[\u12B2-\u12B5\u12B8-\u12BE\u12C0\u12C2-\u12C5\u12C8-\u12D6\u12D8-\u1310]|[\u1312-\u1315\u1318-\u135A\u1380-\u138F\u13A0-\u13F4\u1401-\u166C]|[\u166F-\u167F\u1681-\u169A\u16A0-\u16EA\u1700-\u170C\u170E-\u1711]|[\u1720-\u1731\u1740-\u1751\u1760-\u176C\u176E-\u1770\u1780-\u17B3\u17D7]|[\u17DC\u1820-\u1877\u1880-\u18A8\u18AA\u18B0-\u18F5\u1900-\u191C]|[\u1950-\u196D\u1970-\u1974\u1980-\u19AB\u19C1-\u19C7\u1A00-\u1A16]|[\u1A20-\u1A54\u1AA7\u1B05-\u1B33\u1B45-\u1B4B\u1B83-\u1BA0\u1BAE\u1BAF]|[\u1BBA-\u1BE5\u1C00-\u1C23\u1C4D-\u1C4F\u1C5A-\u1C7D\u1CE9-\u1CEC]|[\u1CEE-\u1CF1\u1CF5\u1CF6\u1D00-\u1DBF\u1E00-\u1F15\u1F18-\u1F1D]|[\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D]|[\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3]|[\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2071\u207F]|[\u2090-\u209C\u2102\u2107\u210A-\u2113\u2115\u2119-\u211D\u2124\u2126\u2128]|[\u212A-\u212D\u212F-\u2139\u213C-\u213F\u2145-\u2149\u214E\u2183\u2184]|[\u2C00-\u2C2E\u2C30-\u2C5E\u2C60-\u2CE4\u2CEB-\u2CEE\u2CF2\u2CF3]|[\u2D00-\u2D25\u2D27\u2D2D\u2D30-\u2D67\u2D6F\u2D80-\u2D96\u2DA0-\u2DA6]|[\u2DA8-\u2DAE\u2DB0-\u2DB6\u2DB8-\u2DBE\u2DC0-\u2DC6\u2DC8-\u2DCE]|[\u2DD0-\u2DD6\u2DD8-\u2DDE\u2E2F\u3005\u3006\u3031-\u3035\u303B\u303C]|[\u3041-\u3096\u309D-\u309F\u30A1-\u30FA\u30FC-\u30FF\u3105-\u312D]|[\u3131-\u318E\u31A0-\u31BA\u31F0-\u31FF\u3400-\u4DB5\u4E00-\u9FCC]|[\uA000-\uA48C\uA4D0-\uA4FD\uA500-\uA60C\uA610-\uA61F\uA62A\uA62B]|[\uA640-\uA66E\uA67F-\uA697\uA6A0-\uA6E5\uA717-\uA71F\uA722-\uA788]|[\uA78B-\uA78E\uA790-\uA793\uA7A0-\uA7AA\uA7F8-\uA801\uA803-\uA805]|[\uA807-\uA80A\uA80C-\uA822\uA840-\uA873\uA882-\uA8B3\uA8F2-\uA8F7\uA8FB]|[\uA90A-\uA925\uA930-\uA946\uA960-\uA97C\uA984-\uA9B2\uA9CF\uAA00-\uAA28]|[\uAA40-\uAA42\uAA44-\uAA4B\uAA60-\uAA76\uAA7A\uAA80-\uAAAF\uAAB1\uAAB5]|[\uAAB6\uAAB9-\uAABD\uAAC0\uAAC2\uAADB-\uAADD\uAAE0-\uAAEA\uAAF2-\uAAF4]|[\uAB01-\uAB06\uAB09-\uAB0E\uAB11-\uAB16\uAB20-\uAB26\uAB28-\uAB2E]|[\uABC0-\uABE2\uAC00-\uD7A3\uD7B0-\uD7C6\uD7CB-\uD7FB\uF900-\uFA6D]|[\uFA70-\uFAD9\uFB00-\uFB06\uFB13-\uFB17\uFB1D\uFB1F-\uFB28\uFB2A-\uFB36]|[\uFB38-\uFB3C\uFB3E\uFB40\uFB41\uFB43\uFB44\uFB46-\uFBB1\uFBD3-\uFD3D]|[\uFD50-\uFD8F\uFD92-\uFDC7\uFDF0-\uFDFB\uFE70-\uFE74\uFE76-\uFEFC]|[\uFF21-\uFF3A\uFF41-\uFF5A\uFF66-\uFFBE\uFFC2-\uFFC7\uFFCA-\uFFCF]|[\uFFD2-\uFFD7\uFFDA-\uFFDC_])/, /^(?:\|)/, /^(?:\()/, /^(?:\))/, /^(?:\[)/, /^(?:\])/, /^(?:\{)/, /^(?:\})/, /^(?:")/, /^(?:\s)/, /^(?:\n)/, /^(?:$)/],
-            conditions: { "INITIAL": { "rules": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42], "inclusive": true } }
-        };
-        return lexer;
-    })();
-    parser.lexer = lexer;
-    function Parser() {
-        this.yy = {};
-    }
-    Parser.prototype = parser;parser.Parser = Parser;
-    return new Parser();
+// return the number of states currently on the stack
+stateStackSize:function stateStackSize() {
+        return this.conditionStack.length;
+    },
+options: {},
+performAction: function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
+var YYSTATE=YY_START;
+switch($avoiding_name_collisions) {
+case 0:return 'STYLE';
+break;
+case 1:return 'LINKSTYLE';
+break;
+case 2:return 'CLASSDEF';
+break;
+case 3:return 'CLASS';
+break;
+case 4:return 'CLICK';
+break;
+case 5:return 12;
+break;
+case 6:return 13;
+break;
+case 7:return 47;
+break;
+case 8:return 35;
+break;
+case 9:return 36;
+break;
+case 10:return 'DIR';
+break;
+case 11:return 'DIR';
+break;
+case 12:return 'DIR';
+break;
+case 13:return 'DIR';
+break;
+case 14:return 'DIR';
+break;
+case 15:return 'DIR';
+break;
+case 16:return 17;
+break;
+case 17:return 23;
+break;
+case 18:return 18;
+break;
+case 19:return 28;
+break;
+case 20:return 40;
+break;
+case 21:return 32;
+break;
+case 22:return 21;
+break;
+case 23:return 22;
+break;
+case 24:return 'ARROW_CROSS';
+break;
+case 25:return 57;
+break;
+case 26:return 'ARROW_CIRCLE';
+break;
+case 27:return 58;
+break;
+case 28:return 25;
+break;
+case 29:return 19;
+break;
+case 30:return 20;
+break;
+case 31:return 16;
+break;
+case 32:return 'PIPE';
+break;
+case 33:return 'PS';
+break;
+case 34:return 'PE';
+break;
+case 35:return 37;
+break;
+case 36:return 39;
+break;
+case 37:return 8
+break;
+case 38:return 10
+break;
+case 39:return 'QUOTE';
+break;
+case 40:return 24;
+break;
+case 41:return 'NEWLINE';
+break;
+case 42:return 5;
+break;
+}
+},
+rules: [/^(?:style\b)/,/^(?:linkStyle\b)/,/^(?:classDef\b)/,/^(?:class\b)/,/^(?:click\b)/,/^(?:graph\b)/,/^(?:digraph\b)/,/^(?:subgraph\b)/,/^(?:node\b)/,/^(?:edge\b)/,/^(?:LR\b)/,/^(?:RL\b)/,/^(?:TB\b)/,/^(?:BT\b)/,/^(?:TD\b)/,/^(?:BR\b)/,/^(?:[0-9])/,/^(?:#)/,/^(?::)/,/^(?:;)/,/^(?:,)/,/^(?:=)/,/^(?:\*)/,/^(?:\.)/,/^(?:--[x])/,/^(?:->)/,/^(?:--[o])/,/^(?:--)/,/^(?:-)/,/^(?:\+)/,/^(?:=)/,/^(?:[\u0021-\u0027\u002A-\u002E\u003F\u0041-\u005A\u0061-\u007A\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6]|[\u00F8-\u02C1\u02C6-\u02D1\u02E0-\u02E4\u02EC\u02EE\u0370-\u0374\u0376\u0377]|[\u037A-\u037D\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03F5]|[\u03F7-\u0481\u048A-\u0527\u0531-\u0556\u0559\u0561-\u0587\u05D0-\u05EA]|[\u05F0-\u05F2\u0620-\u064A\u066E\u066F\u0671-\u06D3\u06D5\u06E5\u06E6\u06EE]|[\u06EF\u06FA-\u06FC\u06FF\u0710\u0712-\u072F\u074D-\u07A5\u07B1\u07CA-\u07EA]|[\u07F4\u07F5\u07FA\u0800-\u0815\u081A\u0824\u0828\u0840-\u0858\u08A0]|[\u08A2-\u08AC\u0904-\u0939\u093D\u0950\u0958-\u0961\u0971-\u0977]|[\u0979-\u097F\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2]|[\u09B6-\u09B9\u09BD\u09CE\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A]|[\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39]|[\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8]|[\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AD0\u0AE0\u0AE1\u0B05-\u0B0C]|[\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B35-\u0B39\u0B3D\u0B5C]|[\u0B5D\u0B5F-\u0B61\u0B71\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99]|[\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB9\u0BD0]|[\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3D]|[\u0C58\u0C59\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3]|[\u0CB5-\u0CB9\u0CBD\u0CDE\u0CE0\u0CE1\u0CF1\u0CF2\u0D05-\u0D0C\u0D0E-\u0D10]|[\u0D12-\u0D3A\u0D3D\u0D4E\u0D60\u0D61\u0D7A-\u0D7F\u0D85-\u0D96\u0D9A-\u0DB1]|[\u0DB3-\u0DBB\u0DBD\u0DC0-\u0DC6\u0E01-\u0E30\u0E32\u0E33\u0E40-\u0E46\u0E81]|[\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3]|[\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD-\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0EC6]|[\u0EDC-\u0EDF\u0F00\u0F40-\u0F47\u0F49-\u0F6C\u0F88-\u0F8C\u1000-\u102A]|[\u103F\u1050-\u1055\u105A-\u105D\u1061\u1065\u1066\u106E-\u1070\u1075-\u1081]|[\u108E\u10A0-\u10C5\u10C7\u10CD\u10D0-\u10FA\u10FC-\u1248\u124A-\u124D]|[\u1250-\u1256\u1258\u125A-\u125D\u1260-\u1288\u128A-\u128D\u1290-\u12B0]|[\u12B2-\u12B5\u12B8-\u12BE\u12C0\u12C2-\u12C5\u12C8-\u12D6\u12D8-\u1310]|[\u1312-\u1315\u1318-\u135A\u1380-\u138F\u13A0-\u13F4\u1401-\u166C]|[\u166F-\u167F\u1681-\u169A\u16A0-\u16EA\u1700-\u170C\u170E-\u1711]|[\u1720-\u1731\u1740-\u1751\u1760-\u176C\u176E-\u1770\u1780-\u17B3\u17D7]|[\u17DC\u1820-\u1877\u1880-\u18A8\u18AA\u18B0-\u18F5\u1900-\u191C]|[\u1950-\u196D\u1970-\u1974\u1980-\u19AB\u19C1-\u19C7\u1A00-\u1A16]|[\u1A20-\u1A54\u1AA7\u1B05-\u1B33\u1B45-\u1B4B\u1B83-\u1BA0\u1BAE\u1BAF]|[\u1BBA-\u1BE5\u1C00-\u1C23\u1C4D-\u1C4F\u1C5A-\u1C7D\u1CE9-\u1CEC]|[\u1CEE-\u1CF1\u1CF5\u1CF6\u1D00-\u1DBF\u1E00-\u1F15\u1F18-\u1F1D]|[\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D]|[\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3]|[\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2071\u207F]|[\u2090-\u209C\u2102\u2107\u210A-\u2113\u2115\u2119-\u211D\u2124\u2126\u2128]|[\u212A-\u212D\u212F-\u2139\u213C-\u213F\u2145-\u2149\u214E\u2183\u2184]|[\u2C00-\u2C2E\u2C30-\u2C5E\u2C60-\u2CE4\u2CEB-\u2CEE\u2CF2\u2CF3]|[\u2D00-\u2D25\u2D27\u2D2D\u2D30-\u2D67\u2D6F\u2D80-\u2D96\u2DA0-\u2DA6]|[\u2DA8-\u2DAE\u2DB0-\u2DB6\u2DB8-\u2DBE\u2DC0-\u2DC6\u2DC8-\u2DCE]|[\u2DD0-\u2DD6\u2DD8-\u2DDE\u2E2F\u3005\u3006\u3031-\u3035\u303B\u303C]|[\u3041-\u3096\u309D-\u309F\u30A1-\u30FA\u30FC-\u30FF\u3105-\u312D]|[\u3131-\u318E\u31A0-\u31BA\u31F0-\u31FF\u3400-\u4DB5\u4E00-\u9FCC]|[\uA000-\uA48C\uA4D0-\uA4FD\uA500-\uA60C\uA610-\uA61F\uA62A\uA62B]|[\uA640-\uA66E\uA67F-\uA697\uA6A0-\uA6E5\uA717-\uA71F\uA722-\uA788]|[\uA78B-\uA78E\uA790-\uA793\uA7A0-\uA7AA\uA7F8-\uA801\uA803-\uA805]|[\uA807-\uA80A\uA80C-\uA822\uA840-\uA873\uA882-\uA8B3\uA8F2-\uA8F7\uA8FB]|[\uA90A-\uA925\uA930-\uA946\uA960-\uA97C\uA984-\uA9B2\uA9CF\uAA00-\uAA28]|[\uAA40-\uAA42\uAA44-\uAA4B\uAA60-\uAA76\uAA7A\uAA80-\uAAAF\uAAB1\uAAB5]|[\uAAB6\uAAB9-\uAABD\uAAC0\uAAC2\uAADB-\uAADD\uAAE0-\uAAEA\uAAF2-\uAAF4]|[\uAB01-\uAB06\uAB09-\uAB0E\uAB11-\uAB16\uAB20-\uAB26\uAB28-\uAB2E]|[\uABC0-\uABE2\uAC00-\uD7A3\uD7B0-\uD7C6\uD7CB-\uD7FB\uF900-\uFA6D]|[\uFA70-\uFAD9\uFB00-\uFB06\uFB13-\uFB17\uFB1D\uFB1F-\uFB28\uFB2A-\uFB36]|[\uFB38-\uFB3C\uFB3E\uFB40\uFB41\uFB43\uFB44\uFB46-\uFBB1\uFBD3-\uFD3D]|[\uFD50-\uFD8F\uFD92-\uFDC7\uFDF0-\uFDFB\uFE70-\uFE74\uFE76-\uFEFC]|[\uFF21-\uFF3A\uFF41-\uFF5A\uFF66-\uFFBE\uFFC2-\uFFC7\uFFCA-\uFFCF]|[\uFFD2-\uFFD7\uFFDA-\uFFDC_])/,/^(?:\|)/,/^(?:\()/,/^(?:\))/,/^(?:\[)/,/^(?:\])/,/^(?:\{)/,/^(?:\})/,/^(?:")/,/^(?:\s)/,/^(?:\n)/,/^(?:$)/],
+conditions: {"INITIAL":{"rules":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42],"inclusive":true}}
+});
+return lexer;
+})();
+parser.lexer = lexer;
+function Parser () {
+  this.yy = {};
+}
+Parser.prototype = parser;parser.Parser = Parser;
+return new Parser;
 })();
 
-if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
-    exports.parser = dot;
-    exports.Parser = dot.Parser;
-    exports.parse = function () {
-        return dot.parse.apply(dot, arguments);
-    };
-    exports.main = function commonjsMain(args) {
-        if (!args[1]) {
-            console.log('Usage: ' + args[0] + ' FILE');
-            process.exit(1);
-        }
-        var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
-        return exports.parser.parse(source);
-    };
-    if (typeof module !== 'undefined' && require.main === module) {
-        exports.main(process.argv.slice(1));
-    }
-}
 
-}).call(this,require('_process'))
-},{"_process":3,"fs":1,"path":2}],118:[function(require,module,exports){
+if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
+exports.parser = parser;
+exports.Parser = parser.Parser;
+exports.parse = function () { return parser.parse.apply(parser, arguments); };
+exports.main = function commonjsMain(args) {
+    if (!args[1]) {
+        console.log('Usage: '+args[0]+' FILE');
+        process.exit(1);
+    }
+    var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
+    return exports.parser.parse(source);
+};
+if (typeof module !== 'undefined' && require.main === module) {
+  exports.main(process.argv.slice(1));
+}
+}
+}).call(this,require("1YiZ5S"))
+},{"1YiZ5S":104,"fs":102,"path":103}],118:[function(require,module,exports){
 (function (process){
-/* parser generated by jison 0.4.15 */
+/* parser generated by jison 0.4.16 */
 /*
   Returns a Parser object of the following structure:
 
@@ -34954,1051 +35388,897 @@ if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
     recoverable: (boolean: TRUE when the parser has a error recovery rule available for this particular error)
   }
 */
-"use strict";
+var parser = (function(){
+var o=function(k,v,o,l){for(o=o||{},l=k.length;l--;o[k[l]]=v);return o},$V0=[1,4],$V1=[1,3],$V2=[1,5],$V3=[1,8,9,10,11,13,18,30,46,71,72,73,74,75,81,85,87,88,90,91,93,94,95,96,97],$V4=[2,2],$V5=[1,12],$V6=[1,13],$V7=[1,14],$V8=[1,15],$V9=[1,31],$Va=[1,33],$Vb=[1,22],$Vc=[1,34],$Vd=[1,24],$Ve=[1,25],$Vf=[1,26],$Vg=[1,27],$Vh=[1,28],$Vi=[1,38],$Vj=[1,40],$Vk=[1,35],$Vl=[1,39],$Vm=[1,45],$Vn=[1,44],$Vo=[1,36],$Vp=[1,37],$Vq=[1,41],$Vr=[1,42],$Vs=[1,43],$Vt=[1,8,9,10,11,13,18,30,32,46,71,72,73,74,75,81,85,87,88,90,91,93,94,95,96,97],$Vu=[1,53],$Vv=[1,52],$Vw=[1,54],$Vx=[1,72],$Vy=[1,80],$Vz=[1,81],$VA=[1,66],$VB=[1,65],$VC=[1,85],$VD=[1,84],$VE=[1,82],$VF=[1,83],$VG=[1,73],$VH=[1,68],$VI=[1,67],$VJ=[1,63],$VK=[1,75],$VL=[1,76],$VM=[1,77],$VN=[1,78],$VO=[1,79],$VP=[1,70],$VQ=[1,69],$VR=[8,9,11],$VS=[8,9,11,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64],$VT=[1,115],$VU=[8,9,10,11,13,15,18,36,38,40,42,46,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,81,85,87,88,90,91,93,94,95,96,97],$VV=[8,9,10,11,12,13,15,16,17,18,30,32,36,37,38,39,40,41,42,43,46,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,71,72,73,74,75,78,81,83,85,87,88,90,91,93,94,95,96,97],$VW=[1,117],$VX=[1,118],$VY=[8,9,10,11,13,18,30,32,46,71,72,73,74,75,81,85,87,88,90,91,93,94,95,96,97],$VZ=[8,9,10,11,12,13,15,16,17,18,30,32,37,39,41,43,46,50,51,52,53,54,56,57,58,59,60,61,62,63,64,65,71,72,73,74,75,78,81,83,85,87,88,90,91,93,94,95,96,97],$V_=[13,18,46,81,85,87,88,90,91,93,94,95,96,97],$V$=[13,18,46,49,65,81,85,87,88,90,91,93,94,95,96,97],$V01=[1,191],$V11=[1,188],$V21=[1,195],$V31=[1,192],$V41=[1,189],$V51=[1,196],$V61=[1,186],$V71=[1,187],$V81=[1,190],$V91=[1,193],$Va1=[1,194],$Vb1=[1,211],$Vc1=[8,9,11,85],$Vd1=[8,9,10,11,46,71,80,81,83,85,87,88,89,90,91];
+var parser = {trace: function trace() { },
+yy: {},
+symbols_: {"error":2,"mermaidDoc":3,"graphConfig":4,"document":5,"line":6,"statement":7,"SEMI":8,"NEWLINE":9,"SPACE":10,"EOF":11,"GRAPH":12,"DIR":13,"FirstStmtSeperator":14,"TAGEND":15,"TAGSTART":16,"UP":17,"DOWN":18,"ending":19,"endToken":20,"spaceList":21,"spaceListNewline":22,"verticeStatement":23,"separator":24,"styleStatement":25,"linkStyleStatement":26,"classDefStatement":27,"classStatement":28,"clickStatement":29,"subgraph":30,"text":31,"end":32,"vertex":33,"link":34,"alphaNum":35,"SQS":36,"SQE":37,"PS":38,"PE":39,"(-":40,"-)":41,"DIAMOND_START":42,"DIAMOND_STOP":43,"alphaNumStatement":44,"alphaNumToken":45,"MINUS":46,"linkStatement":47,"arrowText":48,"TESTSTR":49,"--":50,"ARROW_POINT":51,"ARROW_CIRCLE":52,"ARROW_CROSS":53,"ARROW_OPEN":54,"-.":55,"DOTTED_ARROW_POINT":56,"DOTTED_ARROW_CIRCLE":57,"DOTTED_ARROW_CROSS":58,"DOTTED_ARROW_OPEN":59,"==":60,"THICK_ARROW_POINT":61,"THICK_ARROW_CIRCLE":62,"THICK_ARROW_CROSS":63,"THICK_ARROW_OPEN":64,"PIPE":65,"textToken":66,"STR":67,"commentText":68,"commentToken":69,"keywords":70,"STYLE":71,"LINKSTYLE":72,"CLASSDEF":73,"CLASS":74,"CLICK":75,"textNoTags":76,"textNoTagsToken":77,"DEFAULT":78,"stylesOpt":79,"HEX":80,"NUM":81,"commentStatement":82,"PCT":83,"style":84,"COMMA":85,"styleComponent":86,"ALPHA":87,"COLON":88,"UNIT":89,"BRKT":90,"DOT":91,"graphCodeTokens":92,"PUNCTUATION":93,"UNICODE_TEXT":94,"PLUS":95,"EQUALS":96,"MULT":97,"TAG_START":98,"TAG_END":99,"QUOTE":100,"$accept":0,"$end":1},
+terminals_: {2:"error",8:"SEMI",9:"NEWLINE",10:"SPACE",11:"EOF",12:"GRAPH",13:"DIR",15:"TAGEND",16:"TAGSTART",17:"UP",18:"DOWN",30:"subgraph",32:"end",36:"SQS",37:"SQE",38:"PS",39:"PE",40:"(-",41:"-)",42:"DIAMOND_START",43:"DIAMOND_STOP",46:"MINUS",49:"TESTSTR",50:"--",51:"ARROW_POINT",52:"ARROW_CIRCLE",53:"ARROW_CROSS",54:"ARROW_OPEN",55:"-.",56:"DOTTED_ARROW_POINT",57:"DOTTED_ARROW_CIRCLE",58:"DOTTED_ARROW_CROSS",59:"DOTTED_ARROW_OPEN",60:"==",61:"THICK_ARROW_POINT",62:"THICK_ARROW_CIRCLE",63:"THICK_ARROW_CROSS",64:"THICK_ARROW_OPEN",65:"PIPE",67:"STR",71:"STYLE",72:"LINKSTYLE",73:"CLASSDEF",74:"CLASS",75:"CLICK",78:"DEFAULT",80:"HEX",81:"NUM",83:"PCT",85:"COMMA",87:"ALPHA",88:"COLON",89:"UNIT",90:"BRKT",91:"DOT",93:"PUNCTUATION",94:"UNICODE_TEXT",95:"PLUS",96:"EQUALS",97:"MULT",98:"TAG_START",99:"TAG_END",100:"QUOTE"},
+productions_: [0,[3,2],[5,0],[5,2],[6,1],[6,1],[6,1],[6,1],[6,1],[4,2],[4,2],[4,4],[4,4],[4,4],[4,4],[4,4],[19,2],[19,1],[20,1],[20,1],[20,1],[14,1],[14,1],[14,2],[22,2],[22,2],[22,1],[22,1],[21,2],[21,1],[7,2],[7,2],[7,2],[7,2],[7,2],[7,2],[7,5],[7,4],[24,1],[24,1],[24,1],[23,3],[23,1],[33,4],[33,5],[33,6],[33,7],[33,4],[33,5],[33,4],[33,5],[33,4],[33,5],[33,4],[33,5],[33,1],[33,2],[35,1],[35,2],[44,1],[44,1],[44,1],[44,1],[34,2],[34,3],[34,3],[34,1],[34,3],[34,3],[34,3],[34,3],[34,3],[34,3],[34,3],[34,3],[34,3],[34,3],[34,3],[34,3],[47,1],[47,1],[47,1],[47,1],[47,1],[47,1],[47,1],[47,1],[47,1],[47,1],[47,1],[47,1],[48,3],[31,1],[31,2],[31,1],[68,1],[68,2],[70,1],[70,1],[70,1],[70,1],[70,1],[70,1],[70,1],[70,1],[70,1],[70,1],[70,1],[76,1],[76,2],[27,5],[27,5],[28,5],[29,5],[29,7],[29,5],[29,7],[25,5],[25,5],[26,5],[26,5],[82,3],[79,1],[79,3],[84,1],[84,2],[86,1],[86,1],[86,1],[86,1],[86,1],[86,1],[86,1],[86,1],[86,1],[86,1],[86,1],[69,1],[69,1],[66,1],[66,1],[66,1],[66,1],[66,1],[66,1],[66,1],[77,1],[77,1],[77,1],[77,1],[45,1],[45,1],[45,1],[45,1],[45,1],[45,1],[45,1],[45,1],[45,1],[45,1],[45,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1],[92,1]],
+performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
+/* this == yyval */
 
-var flow = (function () {
-    var o = function o(k, v, _o, l) {
-        for (_o = _o || {}, l = k.length; l--; _o[k[l]] = v);return _o;
-    },
-        $V0 = [1, 4],
-        $V1 = [1, 3],
-        $V2 = [1, 5],
-        $V3 = [1, 8, 9, 10, 11, 13, 18, 30, 46, 71, 72, 73, 74, 75, 81, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97],
-        $V4 = [2, 2],
-        $V5 = [1, 12],
-        $V6 = [1, 13],
-        $V7 = [1, 14],
-        $V8 = [1, 15],
-        $V9 = [1, 31],
-        $Va = [1, 33],
-        $Vb = [1, 22],
-        $Vc = [1, 34],
-        $Vd = [1, 24],
-        $Ve = [1, 25],
-        $Vf = [1, 26],
-        $Vg = [1, 27],
-        $Vh = [1, 28],
-        $Vi = [1, 38],
-        $Vj = [1, 40],
-        $Vk = [1, 35],
-        $Vl = [1, 39],
-        $Vm = [1, 45],
-        $Vn = [1, 44],
-        $Vo = [1, 36],
-        $Vp = [1, 37],
-        $Vq = [1, 41],
-        $Vr = [1, 42],
-        $Vs = [1, 43],
-        $Vt = [1, 8, 9, 10, 11, 13, 18, 30, 32, 46, 71, 72, 73, 74, 75, 81, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97],
-        $Vu = [1, 53],
-        $Vv = [1, 52],
-        $Vw = [1, 54],
-        $Vx = [1, 72],
-        $Vy = [1, 80],
-        $Vz = [1, 81],
-        $VA = [1, 66],
-        $VB = [1, 65],
-        $VC = [1, 85],
-        $VD = [1, 84],
-        $VE = [1, 82],
-        $VF = [1, 83],
-        $VG = [1, 73],
-        $VH = [1, 68],
-        $VI = [1, 67],
-        $VJ = [1, 63],
-        $VK = [1, 75],
-        $VL = [1, 76],
-        $VM = [1, 77],
-        $VN = [1, 78],
-        $VO = [1, 79],
-        $VP = [1, 70],
-        $VQ = [1, 69],
-        $VR = [8, 9, 11],
-        $VS = [8, 9, 11, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64],
-        $VT = [1, 115],
-        $VU = [8, 9, 10, 11, 13, 15, 18, 36, 38, 40, 42, 46, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 81, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97],
-        $VV = [8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 30, 32, 36, 37, 38, 39, 40, 41, 42, 43, 46, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 71, 72, 73, 74, 75, 78, 81, 83, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97],
-        $VW = [1, 117],
-        $VX = [1, 118],
-        $VY = [8, 9, 10, 11, 13, 18, 30, 32, 46, 71, 72, 73, 74, 75, 81, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97],
-        $VZ = [8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 30, 32, 37, 39, 41, 43, 46, 50, 51, 52, 53, 54, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 71, 72, 73, 74, 75, 78, 81, 83, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97],
-        $V_ = [13, 18, 46, 81, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97],
-        $V$ = [13, 18, 46, 49, 65, 81, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97],
-        $V01 = [1, 191],
-        $V11 = [1, 188],
-        $V21 = [1, 195],
-        $V31 = [1, 192],
-        $V41 = [1, 189],
-        $V51 = [1, 196],
-        $V61 = [1, 186],
-        $V71 = [1, 187],
-        $V81 = [1, 190],
-        $V91 = [1, 193],
-        $Va1 = [1, 194],
-        $Vb1 = [1, 211],
-        $Vc1 = [8, 9, 11, 85],
-        $Vd1 = [8, 9, 10, 11, 46, 71, 80, 81, 83, 85, 87, 88, 89, 90, 91];
-    var parser = { trace: function trace() {},
-        yy: {},
-        symbols_: { "error": 2, "mermaidDoc": 3, "graphConfig": 4, "document": 5, "line": 6, "statement": 7, "SEMI": 8, "NEWLINE": 9, "SPACE": 10, "EOF": 11, "GRAPH": 12, "DIR": 13, "FirstStmtSeperator": 14, "TAGEND": 15, "TAGSTART": 16, "UP": 17, "DOWN": 18, "ending": 19, "endToken": 20, "spaceList": 21, "spaceListNewline": 22, "verticeStatement": 23, "separator": 24, "styleStatement": 25, "linkStyleStatement": 26, "classDefStatement": 27, "classStatement": 28, "clickStatement": 29, "subgraph": 30, "text": 31, "end": 32, "vertex": 33, "link": 34, "alphaNum": 35, "SQS": 36, "SQE": 37, "PS": 38, "PE": 39, "(-": 40, "-)": 41, "DIAMOND_START": 42, "DIAMOND_STOP": 43, "alphaNumStatement": 44, "alphaNumToken": 45, "MINUS": 46, "linkStatement": 47, "arrowText": 48, "TESTSTR": 49, "--": 50, "ARROW_POINT": 51, "ARROW_CIRCLE": 52, "ARROW_CROSS": 53, "ARROW_OPEN": 54, "-.": 55, "DOTTED_ARROW_POINT": 56, "DOTTED_ARROW_CIRCLE": 57, "DOTTED_ARROW_CROSS": 58, "DOTTED_ARROW_OPEN": 59, "==": 60, "THICK_ARROW_POINT": 61, "THICK_ARROW_CIRCLE": 62, "THICK_ARROW_CROSS": 63, "THICK_ARROW_OPEN": 64, "PIPE": 65, "textToken": 66, "STR": 67, "commentText": 68, "commentToken": 69, "keywords": 70, "STYLE": 71, "LINKSTYLE": 72, "CLASSDEF": 73, "CLASS": 74, "CLICK": 75, "textNoTags": 76, "textNoTagsToken": 77, "DEFAULT": 78, "stylesOpt": 79, "HEX": 80, "NUM": 81, "commentStatement": 82, "PCT": 83, "style": 84, "COMMA": 85, "styleComponent": 86, "ALPHA": 87, "COLON": 88, "UNIT": 89, "BRKT": 90, "DOT": 91, "graphCodeTokens": 92, "PUNCTUATION": 93, "UNICODE_TEXT": 94, "PLUS": 95, "EQUALS": 96, "MULT": 97, "TAG_START": 98, "TAG_END": 99, "QUOTE": 100, "$accept": 0, "$end": 1 },
-        terminals_: { 2: "error", 8: "SEMI", 9: "NEWLINE", 10: "SPACE", 11: "EOF", 12: "GRAPH", 13: "DIR", 15: "TAGEND", 16: "TAGSTART", 17: "UP", 18: "DOWN", 30: "subgraph", 32: "end", 36: "SQS", 37: "SQE", 38: "PS", 39: "PE", 40: "(-", 41: "-)", 42: "DIAMOND_START", 43: "DIAMOND_STOP", 46: "MINUS", 49: "TESTSTR", 50: "--", 51: "ARROW_POINT", 52: "ARROW_CIRCLE", 53: "ARROW_CROSS", 54: "ARROW_OPEN", 55: "-.", 56: "DOTTED_ARROW_POINT", 57: "DOTTED_ARROW_CIRCLE", 58: "DOTTED_ARROW_CROSS", 59: "DOTTED_ARROW_OPEN", 60: "==", 61: "THICK_ARROW_POINT", 62: "THICK_ARROW_CIRCLE", 63: "THICK_ARROW_CROSS", 64: "THICK_ARROW_OPEN", 65: "PIPE", 67: "STR", 71: "STYLE", 72: "LINKSTYLE", 73: "CLASSDEF", 74: "CLASS", 75: "CLICK", 78: "DEFAULT", 80: "HEX", 81: "NUM", 83: "PCT", 85: "COMMA", 87: "ALPHA", 88: "COLON", 89: "UNIT", 90: "BRKT", 91: "DOT", 93: "PUNCTUATION", 94: "UNICODE_TEXT", 95: "PLUS", 96: "EQUALS", 97: "MULT", 98: "TAG_START", 99: "TAG_END", 100: "QUOTE" },
-        productions_: [0, [3, 2], [5, 0], [5, 2], [6, 1], [6, 1], [6, 1], [6, 1], [6, 1], [4, 2], [4, 2], [4, 4], [4, 4], [4, 4], [4, 4], [4, 4], [19, 2], [19, 1], [20, 1], [20, 1], [20, 1], [14, 1], [14, 1], [14, 2], [22, 2], [22, 2], [22, 1], [22, 1], [21, 2], [21, 1], [7, 2], [7, 2], [7, 2], [7, 2], [7, 2], [7, 2], [7, 5], [7, 4], [24, 1], [24, 1], [24, 1], [23, 3], [23, 1], [33, 4], [33, 5], [33, 6], [33, 7], [33, 4], [33, 5], [33, 4], [33, 5], [33, 4], [33, 5], [33, 4], [33, 5], [33, 1], [33, 2], [35, 1], [35, 2], [44, 1], [44, 1], [44, 1], [44, 1], [34, 2], [34, 3], [34, 3], [34, 1], [34, 3], [34, 3], [34, 3], [34, 3], [34, 3], [34, 3], [34, 3], [34, 3], [34, 3], [34, 3], [34, 3], [34, 3], [47, 1], [47, 1], [47, 1], [47, 1], [47, 1], [47, 1], [47, 1], [47, 1], [47, 1], [47, 1], [47, 1], [47, 1], [48, 3], [31, 1], [31, 2], [31, 1], [68, 1], [68, 2], [70, 1], [70, 1], [70, 1], [70, 1], [70, 1], [70, 1], [70, 1], [70, 1], [70, 1], [70, 1], [70, 1], [76, 1], [76, 2], [27, 5], [27, 5], [28, 5], [29, 5], [29, 7], [29, 5], [29, 7], [25, 5], [25, 5], [26, 5], [26, 5], [82, 3], [79, 1], [79, 3], [84, 1], [84, 2], [86, 1], [86, 1], [86, 1], [86, 1], [86, 1], [86, 1], [86, 1], [86, 1], [86, 1], [86, 1], [86, 1], [69, 1], [69, 1], [66, 1], [66, 1], [66, 1], [66, 1], [66, 1], [66, 1], [66, 1], [77, 1], [77, 1], [77, 1], [77, 1], [45, 1], [45, 1], [45, 1], [45, 1], [45, 1], [45, 1], [45, 1], [45, 1], [45, 1], [45, 1], [45, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1], [92, 1]],
-        performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, /* action[1] */$$, /* vstack */_$ /* lstack */) {
-            /* this == yyval */
+var $0 = $$.length - 1;
+switch (yystate) {
+case 2:
+ this.$ = [];
+break;
+case 3:
 
-            var $0 = $$.length - 1;
-            switch (yystate) {
-                case 2:
-                    this.$ = [];
-                    break;
-                case 3:
+	    if($$[$0] !== []){
+	        $$[$0-1].push($$[$0]);
+	    }
+	    this.$=$$[$0-1];
+break;
+case 4: case 57: case 59: case 60: case 92: case 94: case 95: case 108:
+this.$=$$[$0];
+break;
+case 11:
+ yy.setDirection($$[$0-1]);this.$ = $$[$0-1];
+break;
+case 12:
+ yy.setDirection("LR");this.$ = $$[$0-1];
+break;
+case 13:
+ yy.setDirection("RL");this.$ = $$[$0-1];
+break;
+case 14:
+ yy.setDirection("BT");this.$ = $$[$0-1];
+break;
+case 15:
+ yy.setDirection("TB");this.$ = $$[$0-1];
+break;
+case 30:
+this.$=$$[$0-1]
+break;
+case 31: case 32: case 33: case 34: case 35:
+this.$=[];
+break;
+case 36:
+this.$=yy.addSubGraph($$[$0-1],$$[$0-3]);
+break;
+case 37:
+this.$=yy.addSubGraph($$[$0-1],undefined);
+break;
+case 41:
+ yy.addLink($$[$0-2],$$[$0],$$[$0-1]);this.$ = [$$[$0-2],$$[$0]];
+break;
+case 42:
+this.$ = [$$[$0]];
+break;
+case 43:
+this.$ = $$[$0-3];yy.addVertex($$[$0-3],$$[$0-1],'square');
+break;
+case 44:
+this.$ = $$[$0-4];yy.addVertex($$[$0-4],$$[$0-2],'square');
+break;
+case 45:
+this.$ = $$[$0-5];yy.addVertex($$[$0-5],$$[$0-2],'circle');
+break;
+case 46:
+this.$ = $$[$0-6];yy.addVertex($$[$0-6],$$[$0-3],'circle');
+break;
+case 47:
+this.$ = $$[$0-3];yy.addVertex($$[$0-3],$$[$0-1],'ellipse');
+break;
+case 48:
+this.$ = $$[$0-4];yy.addVertex($$[$0-4],$$[$0-2],'ellipse');
+break;
+case 49:
+this.$ = $$[$0-3];yy.addVertex($$[$0-3],$$[$0-1],'round');
+break;
+case 50:
+this.$ = $$[$0-4];yy.addVertex($$[$0-4],$$[$0-2],'round');
+break;
+case 51:
+this.$ = $$[$0-3];yy.addVertex($$[$0-3],$$[$0-1],'diamond');
+break;
+case 52:
+this.$ = $$[$0-4];yy.addVertex($$[$0-4],$$[$0-2],'diamond');
+break;
+case 53:
+this.$ = $$[$0-3];yy.addVertex($$[$0-3],$$[$0-1],'odd');
+break;
+case 54:
+this.$ = $$[$0-4];yy.addVertex($$[$0-4],$$[$0-2],'odd');
+break;
+case 55:
+this.$ = $$[$0];yy.addVertex($$[$0]);
+break;
+case 56:
+this.$ = $$[$0-1];yy.addVertex($$[$0-1]);
+break;
+case 58: case 93: case 96: case 109:
+this.$=$$[$0-1]+''+$$[$0];
+break;
+case 61:
+this.$='v';
+break;
+case 62:
+this.$='-';
+break;
+case 63:
+$$[$0-1].text = $$[$0];this.$ = $$[$0-1];
+break;
+case 64: case 65:
+$$[$0-2].text = $$[$0-1];this.$ = $$[$0-2];
+break;
+case 66:
+this.$ = $$[$0];
+break;
+case 67:
+this.$ = {"type":"arrow","stroke":"normal","text":$$[$0-1]};
+break;
+case 68:
+this.$ = {"type":"arrow_circle","stroke":"normal","text":$$[$0-1]};
+break;
+case 69:
+this.$ = {"type":"arrow_cross","stroke":"normal","text":$$[$0-1]};
+break;
+case 70:
+this.$ = {"type":"arrow_open","stroke":"normal","text":$$[$0-1]};
+break;
+case 71:
+this.$ = {"type":"arrow","stroke":"dotted","text":$$[$0-1]};
+break;
+case 72:
+this.$ = {"type":"arrow_circle","stroke":"dotted","text":$$[$0-1]};
+break;
+case 73:
+this.$ = {"type":"arrow_cross","stroke":"dotted","text":$$[$0-1]};
+break;
+case 74:
+this.$ = {"type":"arrow_open","stroke":"dotted","text":$$[$0-1]};
+break;
+case 75:
+this.$ = {"type":"arrow","stroke":"thick","text":$$[$0-1]};
+break;
+case 76:
+this.$ = {"type":"arrow_circle","stroke":"thick","text":$$[$0-1]};
+break;
+case 77:
+this.$ = {"type":"arrow_cross","stroke":"thick","text":$$[$0-1]};
+break;
+case 78:
+this.$ = {"type":"arrow_open","stroke":"thick","text":$$[$0-1]};
+break;
+case 79:
+this.$ = {"type":"arrow","stroke":"normal"};
+break;
+case 80:
+this.$ = {"type":"arrow_circle","stroke":"normal"};
+break;
+case 81:
+this.$ = {"type":"arrow_cross","stroke":"normal"};
+break;
+case 82:
+this.$ = {"type":"arrow_open","stroke":"normal"};
+break;
+case 83:
+this.$ = {"type":"arrow","stroke":"dotted"};
+break;
+case 84:
+this.$ = {"type":"arrow_circle","stroke":"dotted"};
+break;
+case 85:
+this.$ = {"type":"arrow_cross","stroke":"dotted"};
+break;
+case 86:
+this.$ = {"type":"arrow_open","stroke":"dotted"};
+break;
+case 87:
+this.$ = {"type":"arrow","stroke":"thick"};
+break;
+case 88:
+this.$ = {"type":"arrow_circle","stroke":"thick"};
+break;
+case 89:
+this.$ = {"type":"arrow_cross","stroke":"thick"};
+break;
+case 90:
+this.$ = {"type":"arrow_open","stroke":"thick"};
+break;
+case 91:
+this.$ = $$[$0-1];
+break;
+case 110: case 111:
+this.$ = $$[$0-4];yy.addClass($$[$0-2],$$[$0]);
+break;
+case 112:
+this.$ = $$[$0-4];yy.setClass($$[$0-2], $$[$0]);
+break;
+case 113:
+this.$ = $$[$0-4];yy.setClickEvent($$[$0-2],        $$[$0], undefined, undefined);
+break;
+case 114:
+this.$ = $$[$0-6];yy.setClickEvent($$[$0-4],        $$[$0-2], undefined, $$[$0])       ;
+break;
+case 115:
+this.$ = $$[$0-4];yy.setClickEvent($$[$0-2], undefined,        $$[$0], undefined);
+break;
+case 116:
+this.$ = $$[$0-6];yy.setClickEvent($$[$0-4], undefined,        $$[$0-2], $$[$0]       );
+break;
+case 117:
+this.$ = $$[$0-4];yy.addVertex($$[$0-2],undefined,undefined,$$[$0]);
+break;
+case 118: case 119: case 120:
+this.$ = $$[$0-4];yy.updateLink($$[$0-2],$$[$0]);
+break;
+case 122:
+this.$ = [$$[$0]]
+break;
+case 123:
+$$[$0-2].push($$[$0]);this.$ = $$[$0-2];
+break;
+case 125:
+this.$ = $$[$0-1] + $$[$0];
+break;
+}
+},
+table: [{3:1,4:2,9:$V0,10:$V1,12:$V2},{1:[3]},o($V3,$V4,{5:6}),{4:7,9:$V0,10:$V1,12:$V2},{4:8,9:$V0,10:$V1,12:$V2},{10:[1,9]},{1:[2,1],6:10,7:11,8:$V5,9:$V6,10:$V7,11:$V8,13:$V9,18:$Va,23:16,25:17,26:18,27:19,28:20,29:21,30:$Vb,33:23,35:29,44:30,45:32,46:$Vc,71:$Vd,72:$Ve,73:$Vf,74:$Vg,75:$Vh,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($V3,[2,9]),o($V3,[2,10]),{13:[1,46],15:[1,47],16:[1,48],17:[1,49],18:[1,50]},o($Vt,[2,3]),o($Vt,[2,4]),o($Vt,[2,5]),o($Vt,[2,6]),o($Vt,[2,7]),o($Vt,[2,8]),{8:$Vu,9:$Vv,11:$Vw,24:51},{8:$Vu,9:$Vv,11:$Vw,24:55},{8:$Vu,9:$Vv,11:$Vw,24:56},{8:$Vu,9:$Vv,11:$Vw,24:57},{8:$Vu,9:$Vv,11:$Vw,24:58},{8:$Vu,9:$Vv,11:$Vw,24:59},{8:$Vu,9:$Vv,10:$Vx,11:$Vw,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,24:61,30:$VE,31:60,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($VR,[2,42],{34:86,47:87,50:[1,88],51:[1,91],52:[1,92],53:[1,93],54:[1,94],55:[1,89],56:[1,95],57:[1,96],58:[1,97],59:[1,98],60:[1,90],61:[1,99],62:[1,100],63:[1,101],64:[1,102]}),{10:[1,103]},{10:[1,104]},{10:[1,105]},{10:[1,106]},{10:[1,107]},o($VS,[2,55],{45:32,21:113,44:114,10:$VT,13:$V9,15:[1,112],18:$Va,36:[1,108],38:[1,109],40:[1,110],42:[1,111],46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs}),o($VU,[2,57]),o($VU,[2,59]),o($VU,[2,60]),o($VU,[2,61]),o($VU,[2,62]),o($VV,[2,150]),o($VV,[2,151]),o($VV,[2,152]),o($VV,[2,153]),o($VV,[2,154]),o($VV,[2,155]),o($VV,[2,156]),o($VV,[2,157]),o($VV,[2,158]),o($VV,[2,159]),o($VV,[2,160]),{8:$VW,9:$VX,10:$VT,14:116,21:119},{8:$VW,9:$VX,10:$VT,14:120,21:119},{8:$VW,9:$VX,10:$VT,14:121,21:119},{8:$VW,9:$VX,10:$VT,14:122,21:119},{8:$VW,9:$VX,10:$VT,14:123,21:119},o($Vt,[2,30]),o($Vt,[2,38]),o($Vt,[2,39]),o($Vt,[2,40]),o($Vt,[2,31]),o($Vt,[2,32]),o($Vt,[2,33]),o($Vt,[2,34]),o($Vt,[2,35]),{8:$Vu,9:$Vv,10:$Vx,11:$Vw,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,24:124,30:$VE,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($VY,$V4,{5:126}),o($VZ,[2,92]),o($VZ,[2,94]),o($VZ,[2,139]),o($VZ,[2,140]),o($VZ,[2,141]),o($VZ,[2,142]),o($VZ,[2,143]),o($VZ,[2,144]),o($VZ,[2,145]),o($VZ,[2,146]),o($VZ,[2,147]),o($VZ,[2,148]),o($VZ,[2,149]),o($VZ,[2,97]),o($VZ,[2,98]),o($VZ,[2,99]),o($VZ,[2,100]),o($VZ,[2,101]),o($VZ,[2,102]),o($VZ,[2,103]),o($VZ,[2,104]),o($VZ,[2,105]),o($VZ,[2,106]),o($VZ,[2,107]),{13:$V9,18:$Va,33:127,35:29,44:30,45:32,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($V_,[2,66],{48:128,49:[1,129],65:[1,130]}),{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:131,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:132,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:133,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($V$,[2,79]),o($V$,[2,80]),o($V$,[2,81]),o($V$,[2,82]),o($V$,[2,83]),o($V$,[2,84]),o($V$,[2,85]),o($V$,[2,86]),o($V$,[2,87]),o($V$,[2,88]),o($V$,[2,89]),o($V$,[2,90]),{13:$V9,18:$Va,35:134,44:30,45:32,46:$Vc,80:[1,135],81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{78:[1,136],81:[1,137]},{13:$V9,18:$Va,35:139,44:30,45:32,46:$Vc,78:[1,138],81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{13:$V9,18:$Va,35:140,44:30,45:32,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{13:$V9,18:$Va,35:141,44:30,45:32,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:142,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:144,32:$VF,38:[1,143],45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:145,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:146,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:147,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($VS,[2,56]),o($VU,[2,58]),o($VS,[2,29],{21:148,10:$VT}),o($V3,[2,11]),o($V3,[2,21]),o($V3,[2,22]),{9:[1,149]},o($V3,[2,12]),o($V3,[2,13]),o($V3,[2,14]),o($V3,[2,15]),o($VY,$V4,{5:150}),o($VZ,[2,93]),{6:10,7:11,8:$V5,9:$V6,10:$V7,11:$V8,13:$V9,18:$Va,23:16,25:17,26:18,27:19,28:20,29:21,30:$Vb,32:[1,151],33:23,35:29,44:30,45:32,46:$Vc,71:$Vd,72:$Ve,73:$Vf,74:$Vg,75:$Vh,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($VR,[2,41]),o($V_,[2,63],{10:[1,152]}),{10:[1,153]},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:154,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,45:71,46:$VG,50:$VH,51:[1,155],52:[1,156],53:[1,157],54:[1,158],60:$VI,66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,45:71,46:$VG,50:$VH,56:[1,159],57:[1,160],58:[1,161],59:[1,162],60:$VI,66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,45:71,46:$VG,50:$VH,60:$VI,61:[1,163],62:[1,164],63:[1,165],64:[1,166],66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:[1,167],13:$V9,18:$Va,44:114,45:32,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:[1,168]},{10:[1,169]},{10:[1,170]},{10:[1,171]},{10:[1,172],13:$V9,18:$Va,44:114,45:32,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:[1,173],13:$V9,18:$Va,44:114,45:32,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:[1,174],13:$V9,18:$Va,44:114,45:32,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,37:[1,175],45:71,46:$VG,50:$VH,60:$VI,66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,31:176,32:$VF,45:71,46:$VG,50:$VH,60:$VI,66:62,67:$VJ,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,39:[1,177],45:71,46:$VG,50:$VH,60:$VI,66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,41:[1,178],45:71,46:$VG,50:$VH,60:$VI,66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,43:[1,179],45:71,46:$VG,50:$VH,60:$VI,66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,37:[1,180],45:71,46:$VG,50:$VH,60:$VI,66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($VS,[2,28]),o($V3,[2,23]),{6:10,7:11,8:$V5,9:$V6,10:$V7,11:$V8,13:$V9,18:$Va,23:16,25:17,26:18,27:19,28:20,29:21,30:$Vb,32:[1,181],33:23,35:29,44:30,45:32,46:$Vc,71:$Vd,72:$Ve,73:$Vf,74:$Vg,75:$Vh,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($Vt,[2,37]),o($V_,[2,65]),o($V_,[2,64]),{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,45:71,46:$VG,50:$VH,60:$VI,65:[1,182],66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($V_,[2,67]),o($V_,[2,68]),o($V_,[2,69]),o($V_,[2,70]),o($V_,[2,71]),o($V_,[2,72]),o($V_,[2,73]),o($V_,[2,74]),o($V_,[2,75]),o($V_,[2,76]),o($V_,[2,77]),o($V_,[2,78]),{10:$V01,46:$V11,71:$V21,79:183,80:$V31,81:$V41,83:$V51,84:184,86:185,87:$V61,88:$V71,89:$V81,90:$V91,91:$Va1},{10:$V01,46:$V11,71:$V21,79:197,80:$V31,81:$V41,83:$V51,84:184,86:185,87:$V61,88:$V71,89:$V81,90:$V91,91:$Va1},{10:$V01,46:$V11,71:$V21,79:198,80:$V31,81:$V41,83:$V51,84:184,86:185,87:$V61,88:$V71,89:$V81,90:$V91,91:$Va1},{10:$V01,46:$V11,71:$V21,79:199,80:$V31,81:$V41,83:$V51,84:184,86:185,87:$V61,88:$V71,89:$V81,90:$V91,91:$Va1},{10:$V01,46:$V11,71:$V21,79:200,80:$V31,81:$V41,83:$V51,84:184,86:185,87:$V61,88:$V71,89:$V81,90:$V91,91:$Va1},{10:$V01,46:$V11,71:$V21,79:201,80:$V31,81:$V41,83:$V51,84:184,86:185,87:$V61,88:$V71,89:$V81,90:$V91,91:$Va1},{13:$V9,18:$Va,35:202,44:30,45:32,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},{13:$V9,18:$Va,35:203,44:30,45:32,46:$Vc,67:[1,204],81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($VS,[2,43],{21:205,10:$VT}),{10:$Vx,12:$Vy,13:$Vz,15:$VA,16:$VB,17:$VC,18:$VD,30:$VE,32:$VF,39:[1,206],45:71,46:$VG,50:$VH,60:$VI,66:125,70:74,71:$VK,72:$VL,73:$VM,74:$VN,75:$VO,77:64,78:$VP,81:$Vi,83:$VQ,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs},o($VS,[2,49],{21:207,10:$VT}),o($VS,[2,47],{21:208,10:$VT}),o($VS,[2,51],{21:209,10:$VT}),o($VS,[2,53],{21:210,10:$VT}),o($Vt,[2,36]),o([10,13,18,46,81,85,87,88,90,91,93,94,95,96,97],[2,91]),o($VR,[2,117],{85:$Vb1}),o($Vc1,[2,122],{86:212,10:$V01,46:$V11,71:$V21,80:$V31,81:$V41,83:$V51,87:$V61,88:$V71,89:$V81,90:$V91,91:$Va1}),o($Vd1,[2,124]),o($Vd1,[2,126]),o($Vd1,[2,127]),o($Vd1,[2,128]),o($Vd1,[2,129]),o($Vd1,[2,130]),o($Vd1,[2,131]),o($Vd1,[2,132]),o($Vd1,[2,133]),o($Vd1,[2,134]),o($Vd1,[2,135]),o($Vd1,[2,136]),o($VR,[2,118],{85:$Vb1}),o($VR,[2,119],{85:$Vb1}),o($VR,[2,120],{85:$Vb1}),o($VR,[2,110],{85:$Vb1}),o($VR,[2,111],{85:$Vb1}),o($VR,[2,112],{45:32,44:114,13:$V9,18:$Va,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs}),o($VR,[2,113],{45:32,44:114,10:[1,213],13:$V9,18:$Va,46:$Vc,81:$Vi,85:$Vj,87:$Vk,88:$Vl,90:$Vm,91:$Vn,93:$Vo,94:$Vp,95:$Vq,96:$Vr,97:$Vs}),o($VR,[2,115],{10:[1,214]}),o($VS,[2,44]),{39:[1,215]},o($VS,[2,50]),o($VS,[2,48]),o($VS,[2,52]),o($VS,[2,54]),{10:$V01,46:$V11,71:$V21,80:$V31,81:$V41,83:$V51,84:216,86:185,87:$V61,88:$V71,89:$V81,90:$V91,91:$Va1},o($Vd1,[2,125]),{67:[1,217]},{67:[1,218]},o($VS,[2,45],{21:219,10:$VT}),o($Vc1,[2,123],{86:212,10:$V01,46:$V11,71:$V21,80:$V31,81:$V41,83:$V51,87:$V61,88:$V71,89:$V81,90:$V91,91:$Va1}),o($VR,[2,114]),o($VR,[2,116]),o($VS,[2,46])],
+defaultActions: {},
+parseError: function parseError(str, hash) {
+    if (hash.recoverable) {
+        this.trace(str);
+    } else {
+        function _parseError (msg, hash) {
+            this.message = msg;
+            this.hash = hash;
+        }
+        _parseError.prototype = new Error();
 
-                    if ($$[$0] !== []) {
-                        $$[$0 - 1].push($$[$0]);
+        throw new _parseError(str, hash);
+    }
+},
+parse: function parse(input) {
+    var self = this, stack = [0], tstack = [], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, recovering = 0, TERROR = 2, EOF = 1;
+    var args = lstack.slice.call(arguments, 1);
+    var lexer = Object.create(this.lexer);
+    var sharedState = { yy: {} };
+    for (var k in this.yy) {
+        if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
+            sharedState.yy[k] = this.yy[k];
+        }
+    }
+    lexer.setInput(input, sharedState.yy);
+    sharedState.yy.lexer = lexer;
+    sharedState.yy.parser = this;
+    if (typeof lexer.yylloc == 'undefined') {
+        lexer.yylloc = {};
+    }
+    var yyloc = lexer.yylloc;
+    lstack.push(yyloc);
+    var ranges = lexer.options && lexer.options.ranges;
+    if (typeof sharedState.yy.parseError === 'function') {
+        this.parseError = sharedState.yy.parseError;
+    } else {
+        this.parseError = Object.getPrototypeOf(this).parseError;
+    }
+    function popStack(n) {
+        stack.length = stack.length - 2 * n;
+        vstack.length = vstack.length - n;
+        lstack.length = lstack.length - n;
+    }
+    _token_stack:
+        var lex = function () {
+            var token;
+            token = lexer.lex() || EOF;
+            if (typeof token !== 'number') {
+                token = self.symbols_[token] || token;
+            }
+            return token;
+        };
+    var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
+    while (true) {
+        state = stack[stack.length - 1];
+        if (this.defaultActions[state]) {
+            action = this.defaultActions[state];
+        } else {
+            if (symbol === null || typeof symbol == 'undefined') {
+                symbol = lex();
+            }
+            action = table[state] && table[state][symbol];
+        }
+                    if (typeof action === 'undefined' || !action.length || !action[0]) {
+                var errStr = '';
+                expected = [];
+                for (p in table[state]) {
+                    if (this.terminals_[p] && p > TERROR) {
+                        expected.push('\'' + this.terminals_[p] + '\'');
                     }
-                    this.$ = $$[$0 - 1];
-                    break;
-                case 4:case 57:case 59:case 60:case 92:case 94:case 95:case 108:
-                    this.$ = $$[$0];
-                    break;
-                case 11:
-                    yy.setDirection($$[$0 - 1]);this.$ = $$[$0 - 1];
-                    break;
-                case 12:
-                    yy.setDirection("LR");this.$ = $$[$0 - 1];
-                    break;
-                case 13:
-                    yy.setDirection("RL");this.$ = $$[$0 - 1];
-                    break;
-                case 14:
-                    yy.setDirection("BT");this.$ = $$[$0 - 1];
-                    break;
-                case 15:
-                    yy.setDirection("TB");this.$ = $$[$0 - 1];
-                    break;
-                case 30:
-                    this.$ = $$[$0 - 1];
-                    break;
-                case 31:case 32:case 33:case 34:case 35:
-                    this.$ = [];
-                    break;
-                case 36:
-                    this.$ = yy.addSubGraph($$[$0 - 1], $$[$0 - 3]);
-                    break;
-                case 37:
-                    this.$ = yy.addSubGraph($$[$0 - 1], undefined);
-                    break;
-                case 41:
-                    yy.addLink($$[$0 - 2], $$[$0], $$[$0 - 1]);this.$ = [$$[$0 - 2], $$[$0]];
-                    break;
-                case 42:
-                    this.$ = [$$[$0]];
-                    break;
-                case 43:
-                    this.$ = $$[$0 - 3];yy.addVertex($$[$0 - 3], $$[$0 - 1], 'square');
-                    break;
-                case 44:
-                    this.$ = $$[$0 - 4];yy.addVertex($$[$0 - 4], $$[$0 - 2], 'square');
-                    break;
-                case 45:
-                    this.$ = $$[$0 - 5];yy.addVertex($$[$0 - 5], $$[$0 - 2], 'circle');
-                    break;
-                case 46:
-                    this.$ = $$[$0 - 6];yy.addVertex($$[$0 - 6], $$[$0 - 3], 'circle');
-                    break;
-                case 47:
-                    this.$ = $$[$0 - 3];yy.addVertex($$[$0 - 3], $$[$0 - 1], 'ellipse');
-                    break;
-                case 48:
-                    this.$ = $$[$0 - 4];yy.addVertex($$[$0 - 4], $$[$0 - 2], 'ellipse');
-                    break;
-                case 49:
-                    this.$ = $$[$0 - 3];yy.addVertex($$[$0 - 3], $$[$0 - 1], 'round');
-                    break;
-                case 50:
-                    this.$ = $$[$0 - 4];yy.addVertex($$[$0 - 4], $$[$0 - 2], 'round');
-                    break;
-                case 51:
-                    this.$ = $$[$0 - 3];yy.addVertex($$[$0 - 3], $$[$0 - 1], 'diamond');
-                    break;
-                case 52:
-                    this.$ = $$[$0 - 4];yy.addVertex($$[$0 - 4], $$[$0 - 2], 'diamond');
-                    break;
-                case 53:
-                    this.$ = $$[$0 - 3];yy.addVertex($$[$0 - 3], $$[$0 - 1], 'odd');
-                    break;
-                case 54:
-                    this.$ = $$[$0 - 4];yy.addVertex($$[$0 - 4], $$[$0 - 2], 'odd');
-                    break;
-                case 55:
-                    this.$ = $$[$0];yy.addVertex($$[$0]);
-                    break;
-                case 56:
-                    this.$ = $$[$0 - 1];yy.addVertex($$[$0 - 1]);
-                    break;
-                case 58:case 93:case 96:case 109:
-                    this.$ = $$[$0 - 1] + '' + $$[$0];
-                    break;
-                case 61:
-                    this.$ = 'v';
-                    break;
-                case 62:
-                    this.$ = '-';
-                    break;
-                case 63:
-                    $$[$0 - 1].text = $$[$0];this.$ = $$[$0 - 1];
-                    break;
-                case 64:case 65:
-                    $$[$0 - 2].text = $$[$0 - 1];this.$ = $$[$0 - 2];
-                    break;
-                case 66:
-                    this.$ = $$[$0];
-                    break;
-                case 67:
-                    this.$ = { "type": "arrow", "stroke": "normal", "text": $$[$0 - 1] };
-                    break;
-                case 68:
-                    this.$ = { "type": "arrow_circle", "stroke": "normal", "text": $$[$0 - 1] };
-                    break;
-                case 69:
-                    this.$ = { "type": "arrow_cross", "stroke": "normal", "text": $$[$0 - 1] };
-                    break;
-                case 70:
-                    this.$ = { "type": "arrow_open", "stroke": "normal", "text": $$[$0 - 1] };
-                    break;
-                case 71:
-                    this.$ = { "type": "arrow", "stroke": "dotted", "text": $$[$0 - 1] };
-                    break;
-                case 72:
-                    this.$ = { "type": "arrow_circle", "stroke": "dotted", "text": $$[$0 - 1] };
-                    break;
-                case 73:
-                    this.$ = { "type": "arrow_cross", "stroke": "dotted", "text": $$[$0 - 1] };
-                    break;
-                case 74:
-                    this.$ = { "type": "arrow_open", "stroke": "dotted", "text": $$[$0 - 1] };
-                    break;
-                case 75:
-                    this.$ = { "type": "arrow", "stroke": "thick", "text": $$[$0 - 1] };
-                    break;
-                case 76:
-                    this.$ = { "type": "arrow_circle", "stroke": "thick", "text": $$[$0 - 1] };
-                    break;
-                case 77:
-                    this.$ = { "type": "arrow_cross", "stroke": "thick", "text": $$[$0 - 1] };
-                    break;
-                case 78:
-                    this.$ = { "type": "arrow_open", "stroke": "thick", "text": $$[$0 - 1] };
-                    break;
-                case 79:
-                    this.$ = { "type": "arrow", "stroke": "normal" };
-                    break;
-                case 80:
-                    this.$ = { "type": "arrow_circle", "stroke": "normal" };
-                    break;
-                case 81:
-                    this.$ = { "type": "arrow_cross", "stroke": "normal" };
-                    break;
-                case 82:
-                    this.$ = { "type": "arrow_open", "stroke": "normal" };
-                    break;
-                case 83:
-                    this.$ = { "type": "arrow", "stroke": "dotted" };
-                    break;
-                case 84:
-                    this.$ = { "type": "arrow_circle", "stroke": "dotted" };
-                    break;
-                case 85:
-                    this.$ = { "type": "arrow_cross", "stroke": "dotted" };
-                    break;
-                case 86:
-                    this.$ = { "type": "arrow_open", "stroke": "dotted" };
-                    break;
-                case 87:
-                    this.$ = { "type": "arrow", "stroke": "thick" };
-                    break;
-                case 88:
-                    this.$ = { "type": "arrow_circle", "stroke": "thick" };
-                    break;
-                case 89:
-                    this.$ = { "type": "arrow_cross", "stroke": "thick" };
-                    break;
-                case 90:
-                    this.$ = { "type": "arrow_open", "stroke": "thick" };
-                    break;
-                case 91:
-                    this.$ = $$[$0 - 1];
-                    break;
-                case 110:case 111:
-                    this.$ = $$[$0 - 4];yy.addClass($$[$0 - 2], $$[$0]);
-                    break;
-                case 112:
-                    this.$ = $$[$0 - 4];yy.setClass($$[$0 - 2], $$[$0]);
-                    break;
-                case 113:
-                    this.$ = $$[$0 - 4];yy.setClickEvent($$[$0 - 2], $$[$0], undefined, undefined);
-                    break;
-                case 114:
-                    this.$ = $$[$0 - 6];yy.setClickEvent($$[$0 - 4], $$[$0 - 2], undefined, $$[$0]);
-                    break;
-                case 115:
-                    this.$ = $$[$0 - 4];yy.setClickEvent($$[$0 - 2], undefined, $$[$0], undefined);
-                    break;
-                case 116:
-                    this.$ = $$[$0 - 6];yy.setClickEvent($$[$0 - 4], undefined, $$[$0 - 2], $$[$0]);
-                    break;
-                case 117:
-                    this.$ = $$[$0 - 4];yy.addVertex($$[$0 - 2], undefined, undefined, $$[$0]);
-                    break;
-                case 118:case 119:case 120:
-                    this.$ = $$[$0 - 4];yy.updateLink($$[$0 - 2], $$[$0]);
-                    break;
-                case 122:
-                    this.$ = [$$[$0]];
-                    break;
-                case 123:
-                    $$[$0 - 2].push($$[$0]);this.$ = $$[$0 - 2];
-                    break;
-                case 125:
-                    this.$ = $$[$0 - 1] + $$[$0];
-                    break;
-            }
-        },
-        table: [{ 3: 1, 4: 2, 9: $V0, 10: $V1, 12: $V2 }, { 1: [3] }, o($V3, $V4, { 5: 6 }), { 4: 7, 9: $V0, 10: $V1, 12: $V2 }, { 4: 8, 9: $V0, 10: $V1, 12: $V2 }, { 10: [1, 9] }, { 1: [2, 1], 6: 10, 7: 11, 8: $V5, 9: $V6, 10: $V7, 11: $V8, 13: $V9, 18: $Va, 23: 16, 25: 17, 26: 18, 27: 19, 28: 20, 29: 21, 30: $Vb, 33: 23, 35: 29, 44: 30, 45: 32, 46: $Vc, 71: $Vd, 72: $Ve, 73: $Vf, 74: $Vg, 75: $Vh, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($V3, [2, 9]), o($V3, [2, 10]), { 13: [1, 46], 15: [1, 47], 16: [1, 48], 17: [1, 49], 18: [1, 50] }, o($Vt, [2, 3]), o($Vt, [2, 4]), o($Vt, [2, 5]), o($Vt, [2, 6]), o($Vt, [2, 7]), o($Vt, [2, 8]), { 8: $Vu, 9: $Vv, 11: $Vw, 24: 51 }, { 8: $Vu, 9: $Vv, 11: $Vw, 24: 55 }, { 8: $Vu, 9: $Vv, 11: $Vw, 24: 56 }, { 8: $Vu, 9: $Vv, 11: $Vw, 24: 57 }, { 8: $Vu, 9: $Vv, 11: $Vw, 24: 58 }, { 8: $Vu, 9: $Vv, 11: $Vw, 24: 59 }, { 8: $Vu, 9: $Vv, 10: $Vx, 11: $Vw, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 24: 61, 30: $VE, 31: 60, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($VR, [2, 42], { 34: 86, 47: 87, 50: [1, 88], 51: [1, 91], 52: [1, 92], 53: [1, 93], 54: [1, 94], 55: [1, 89], 56: [1, 95], 57: [1, 96], 58: [1, 97], 59: [1, 98], 60: [1, 90], 61: [1, 99], 62: [1, 100], 63: [1, 101], 64: [1, 102] }), { 10: [1, 103] }, { 10: [1, 104] }, { 10: [1, 105] }, { 10: [1, 106] }, { 10: [1, 107] }, o($VS, [2, 55], { 45: 32, 21: 113, 44: 114, 10: $VT, 13: $V9, 15: [1, 112], 18: $Va, 36: [1, 108], 38: [1, 109], 40: [1, 110], 42: [1, 111], 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }), o($VU, [2, 57]), o($VU, [2, 59]), o($VU, [2, 60]), o($VU, [2, 61]), o($VU, [2, 62]), o($VV, [2, 150]), o($VV, [2, 151]), o($VV, [2, 152]), o($VV, [2, 153]), o($VV, [2, 154]), o($VV, [2, 155]), o($VV, [2, 156]), o($VV, [2, 157]), o($VV, [2, 158]), o($VV, [2, 159]), o($VV, [2, 160]), { 8: $VW, 9: $VX, 10: $VT, 14: 116, 21: 119 }, { 8: $VW, 9: $VX, 10: $VT, 14: 120, 21: 119 }, { 8: $VW, 9: $VX, 10: $VT, 14: 121, 21: 119 }, { 8: $VW, 9: $VX, 10: $VT, 14: 122, 21: 119 }, { 8: $VW, 9: $VX, 10: $VT, 14: 123, 21: 119 }, o($Vt, [2, 30]), o($Vt, [2, 38]), o($Vt, [2, 39]), o($Vt, [2, 40]), o($Vt, [2, 31]), o($Vt, [2, 32]), o($Vt, [2, 33]), o($Vt, [2, 34]), o($Vt, [2, 35]), { 8: $Vu, 9: $Vv, 10: $Vx, 11: $Vw, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 24: 124, 30: $VE, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($VY, $V4, { 5: 126 }), o($VZ, [2, 92]), o($VZ, [2, 94]), o($VZ, [2, 139]), o($VZ, [2, 140]), o($VZ, [2, 141]), o($VZ, [2, 142]), o($VZ, [2, 143]), o($VZ, [2, 144]), o($VZ, [2, 145]), o($VZ, [2, 146]), o($VZ, [2, 147]), o($VZ, [2, 148]), o($VZ, [2, 149]), o($VZ, [2, 97]), o($VZ, [2, 98]), o($VZ, [2, 99]), o($VZ, [2, 100]), o($VZ, [2, 101]), o($VZ, [2, 102]), o($VZ, [2, 103]), o($VZ, [2, 104]), o($VZ, [2, 105]), o($VZ, [2, 106]), o($VZ, [2, 107]), { 13: $V9, 18: $Va, 33: 127, 35: 29, 44: 30, 45: 32, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($V_, [2, 66], { 48: 128, 49: [1, 129], 65: [1, 130] }), { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 131, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 132, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 133, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($V$, [2, 79]), o($V$, [2, 80]), o($V$, [2, 81]), o($V$, [2, 82]), o($V$, [2, 83]), o($V$, [2, 84]), o($V$, [2, 85]), o($V$, [2, 86]), o($V$, [2, 87]), o($V$, [2, 88]), o($V$, [2, 89]), o($V$, [2, 90]), { 13: $V9, 18: $Va, 35: 134, 44: 30, 45: 32, 46: $Vc, 80: [1, 135], 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 78: [1, 136], 81: [1, 137] }, { 13: $V9, 18: $Va, 35: 139, 44: 30, 45: 32, 46: $Vc, 78: [1, 138], 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 13: $V9, 18: $Va, 35: 140, 44: 30, 45: 32, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 13: $V9, 18: $Va, 35: 141, 44: 30, 45: 32, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 142, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 144, 32: $VF, 38: [1, 143], 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 145, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 146, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 147, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($VS, [2, 56]), o($VU, [2, 58]), o($VS, [2, 29], { 21: 148, 10: $VT }), o($V3, [2, 11]), o($V3, [2, 21]), o($V3, [2, 22]), { 9: [1, 149] }, o($V3, [2, 12]), o($V3, [2, 13]), o($V3, [2, 14]), o($V3, [2, 15]), o($VY, $V4, { 5: 150 }), o($VZ, [2, 93]), { 6: 10, 7: 11, 8: $V5, 9: $V6, 10: $V7, 11: $V8, 13: $V9, 18: $Va, 23: 16, 25: 17, 26: 18, 27: 19, 28: 20, 29: 21, 30: $Vb, 32: [1, 151], 33: 23, 35: 29, 44: 30, 45: 32, 46: $Vc, 71: $Vd, 72: $Ve, 73: $Vf, 74: $Vg, 75: $Vh, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($VR, [2, 41]), o($V_, [2, 63], { 10: [1, 152] }), { 10: [1, 153] }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 154, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 45: 71, 46: $VG, 50: $VH, 51: [1, 155], 52: [1, 156], 53: [1, 157], 54: [1, 158], 60: $VI, 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 45: 71, 46: $VG, 50: $VH, 56: [1, 159], 57: [1, 160], 58: [1, 161], 59: [1, 162], 60: $VI, 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 61: [1, 163], 62: [1, 164], 63: [1, 165], 64: [1, 166], 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: [1, 167], 13: $V9, 18: $Va, 44: 114, 45: 32, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: [1, 168] }, { 10: [1, 169] }, { 10: [1, 170] }, { 10: [1, 171] }, { 10: [1, 172], 13: $V9, 18: $Va, 44: 114, 45: 32, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: [1, 173], 13: $V9, 18: $Va, 44: 114, 45: 32, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: [1, 174], 13: $V9, 18: $Va, 44: 114, 45: 32, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 37: [1, 175], 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 31: 176, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 62, 67: $VJ, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 39: [1, 177], 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 41: [1, 178], 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 43: [1, 179], 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 37: [1, 180], 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($VS, [2, 28]), o($V3, [2, 23]), { 6: 10, 7: 11, 8: $V5, 9: $V6, 10: $V7, 11: $V8, 13: $V9, 18: $Va, 23: 16, 25: 17, 26: 18, 27: 19, 28: 20, 29: 21, 30: $Vb, 32: [1, 181], 33: 23, 35: 29, 44: 30, 45: 32, 46: $Vc, 71: $Vd, 72: $Ve, 73: $Vf, 74: $Vg, 75: $Vh, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($Vt, [2, 37]), o($V_, [2, 65]), o($V_, [2, 64]), { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 45: 71, 46: $VG, 50: $VH, 60: $VI, 65: [1, 182], 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($V_, [2, 67]), o($V_, [2, 68]), o($V_, [2, 69]), o($V_, [2, 70]), o($V_, [2, 71]), o($V_, [2, 72]), o($V_, [2, 73]), o($V_, [2, 74]), o($V_, [2, 75]), o($V_, [2, 76]), o($V_, [2, 77]), o($V_, [2, 78]), { 10: $V01, 46: $V11, 71: $V21, 79: 183, 80: $V31, 81: $V41, 83: $V51, 84: 184, 86: 185, 87: $V61, 88: $V71, 89: $V81, 90: $V91, 91: $Va1 }, { 10: $V01, 46: $V11, 71: $V21, 79: 197, 80: $V31, 81: $V41, 83: $V51, 84: 184, 86: 185, 87: $V61, 88: $V71, 89: $V81, 90: $V91, 91: $Va1 }, { 10: $V01, 46: $V11, 71: $V21, 79: 198, 80: $V31, 81: $V41, 83: $V51, 84: 184, 86: 185, 87: $V61, 88: $V71, 89: $V81, 90: $V91, 91: $Va1 }, { 10: $V01, 46: $V11, 71: $V21, 79: 199, 80: $V31, 81: $V41, 83: $V51, 84: 184, 86: 185, 87: $V61, 88: $V71, 89: $V81, 90: $V91, 91: $Va1 }, { 10: $V01, 46: $V11, 71: $V21, 79: 200, 80: $V31, 81: $V41, 83: $V51, 84: 184, 86: 185, 87: $V61, 88: $V71, 89: $V81, 90: $V91, 91: $Va1 }, { 10: $V01, 46: $V11, 71: $V21, 79: 201, 80: $V31, 81: $V41, 83: $V51, 84: 184, 86: 185, 87: $V61, 88: $V71, 89: $V81, 90: $V91, 91: $Va1 }, { 13: $V9, 18: $Va, 35: 202, 44: 30, 45: 32, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, { 13: $V9, 18: $Va, 35: 203, 44: 30, 45: 32, 46: $Vc, 67: [1, 204], 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($VS, [2, 43], { 21: 205, 10: $VT }), { 10: $Vx, 12: $Vy, 13: $Vz, 15: $VA, 16: $VB, 17: $VC, 18: $VD, 30: $VE, 32: $VF, 39: [1, 206], 45: 71, 46: $VG, 50: $VH, 60: $VI, 66: 125, 70: 74, 71: $VK, 72: $VL, 73: $VM, 74: $VN, 75: $VO, 77: 64, 78: $VP, 81: $Vi, 83: $VQ, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }, o($VS, [2, 49], { 21: 207, 10: $VT }), o($VS, [2, 47], { 21: 208, 10: $VT }), o($VS, [2, 51], { 21: 209, 10: $VT }), o($VS, [2, 53], { 21: 210, 10: $VT }), o($Vt, [2, 36]), o([10, 13, 18, 46, 81, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97], [2, 91]), o($VR, [2, 117], { 85: $Vb1 }), o($Vc1, [2, 122], { 86: 212, 10: $V01, 46: $V11, 71: $V21, 80: $V31, 81: $V41, 83: $V51, 87: $V61, 88: $V71, 89: $V81, 90: $V91, 91: $Va1 }), o($Vd1, [2, 124]), o($Vd1, [2, 126]), o($Vd1, [2, 127]), o($Vd1, [2, 128]), o($Vd1, [2, 129]), o($Vd1, [2, 130]), o($Vd1, [2, 131]), o($Vd1, [2, 132]), o($Vd1, [2, 133]), o($Vd1, [2, 134]), o($Vd1, [2, 135]), o($Vd1, [2, 136]), o($VR, [2, 118], { 85: $Vb1 }), o($VR, [2, 119], { 85: $Vb1 }), o($VR, [2, 120], { 85: $Vb1 }), o($VR, [2, 110], { 85: $Vb1 }), o($VR, [2, 111], { 85: $Vb1 }), o($VR, [2, 112], { 45: 32, 44: 114, 13: $V9, 18: $Va, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }), o($VR, [2, 113], { 45: 32, 44: 114, 10: [1, 213], 13: $V9, 18: $Va, 46: $Vc, 81: $Vi, 85: $Vj, 87: $Vk, 88: $Vl, 90: $Vm, 91: $Vn, 93: $Vo, 94: $Vp, 95: $Vq, 96: $Vr, 97: $Vs }), o($VR, [2, 115], { 10: [1, 214] }), o($VS, [2, 44]), { 39: [1, 215] }, o($VS, [2, 50]), o($VS, [2, 48]), o($VS, [2, 52]), o($VS, [2, 54]), { 10: $V01, 46: $V11, 71: $V21, 80: $V31, 81: $V41, 83: $V51, 84: 216, 86: 185, 87: $V61, 88: $V71, 89: $V81, 90: $V91, 91: $Va1 }, o($Vd1, [2, 125]), { 67: [1, 217] }, { 67: [1, 218] }, o($VS, [2, 45], { 21: 219, 10: $VT }), o($Vc1, [2, 123], { 86: 212, 10: $V01, 46: $V11, 71: $V21, 80: $V31, 81: $V41, 83: $V51, 87: $V61, 88: $V71, 89: $V81, 90: $V91, 91: $Va1 }), o($VR, [2, 114]), o($VR, [2, 116]), o($VS, [2, 46])],
-        defaultActions: {},
-        parseError: function parseError(str, hash) {
-            if (hash.recoverable) {
-                this.trace(str);
-            } else {
-                var _parseError = function _parseError(msg, hash) {
-                    this.message = msg;
-                    this.hash = hash;
-                };
-
-                _parseError.prototype = new Error();
-
-                throw new _parseError(str, hash);
-            }
-        },
-        parse: function parse(input) {
-            var self = this,
-                stack = [0],
-                tstack = [],
-                vstack = [null],
-                lstack = [],
-                table = this.table,
-                yytext = '',
-                yylineno = 0,
-                yyleng = 0,
-                recovering = 0,
-                TERROR = 2,
-                EOF = 1;
-            var args = lstack.slice.call(arguments, 1);
-            var lexer = Object.create(this.lexer);
-            var sharedState = { yy: {} };
-            for (var k in this.yy) {
-                if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
-                    sharedState.yy[k] = this.yy[k];
                 }
-            }
-            lexer.setInput(input, sharedState.yy);
-            sharedState.yy.lexer = lexer;
-            sharedState.yy.parser = this;
-            if (typeof lexer.yylloc == 'undefined') {
-                lexer.yylloc = {};
-            }
-            var yyloc = lexer.yylloc;
-            lstack.push(yyloc);
-            var ranges = lexer.options && lexer.options.ranges;
-            if (typeof sharedState.yy.parseError === 'function') {
-                this.parseError = sharedState.yy.parseError;
-            } else {
-                this.parseError = Object.getPrototypeOf(this).parseError;
-            }
-            function popStack(n) {
-                stack.length = stack.length - 2 * n;
-                vstack.length = vstack.length - n;
-                lstack.length = lstack.length - n;
-            }
-            _token_stack: var lex = function lex() {
-                var token;
-                token = lexer.lex() || EOF;
-                if (typeof token !== 'number') {
-                    token = self.symbols_[token] || token;
+                if (lexer.showPosition) {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
+                } else {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
                 }
-                return token;
+                this.parseError(errStr, {
+                    text: lexer.match,
+                    token: this.terminals_[symbol] || symbol,
+                    line: lexer.yylineno,
+                    loc: yyloc,
+                    expected: expected
+                });
+            }
+        if (action[0] instanceof Array && action.length > 1) {
+            throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
+        }
+        switch (action[0]) {
+        case 1:
+            stack.push(symbol);
+            vstack.push(lexer.yytext);
+            lstack.push(lexer.yylloc);
+            stack.push(action[1]);
+            symbol = null;
+            if (!preErrorSymbol) {
+                yyleng = lexer.yyleng;
+                yytext = lexer.yytext;
+                yylineno = lexer.yylineno;
+                yyloc = lexer.yylloc;
+                if (recovering > 0) {
+                    recovering--;
+                }
+            } else {
+                symbol = preErrorSymbol;
+                preErrorSymbol = null;
+            }
+            break;
+        case 2:
+            len = this.productions_[action[1]][1];
+            yyval.$ = vstack[vstack.length - len];
+            yyval._$ = {
+                first_line: lstack[lstack.length - (len || 1)].first_line,
+                last_line: lstack[lstack.length - 1].last_line,
+                first_column: lstack[lstack.length - (len || 1)].first_column,
+                last_column: lstack[lstack.length - 1].last_column
             };
-            var symbol,
-                preErrorSymbol,
-                state,
-                action,
-                a,
-                r,
-                yyval = {},
-                p,
-                len,
-                newState,
-                expected;
-            while (true) {
-                state = stack[stack.length - 1];
-                if (this.defaultActions[state]) {
-                    action = this.defaultActions[state];
-                } else {
-                    if (symbol === null || typeof symbol == 'undefined') {
-                        symbol = lex();
-                    }
-                    action = table[state] && table[state][symbol];
-                }
-                if (typeof action === 'undefined' || !action.length || !action[0]) {
-                    var errStr = '';
-                    expected = [];
-                    for (p in table[state]) {
-                        if (this.terminals_[p] && p > TERROR) {
-                            expected.push('\'' + this.terminals_[p] + '\'');
-                        }
-                    }
-                    if (lexer.showPosition) {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
-                    } else {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
-                    }
-                    this.parseError(errStr, {
-                        text: lexer.match,
-                        token: this.terminals_[symbol] || symbol,
-                        line: lexer.yylineno,
-                        loc: yyloc,
-                        expected: expected
-                    });
-                }
-                if (action[0] instanceof Array && action.length > 1) {
-                    throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
-                }
-                switch (action[0]) {
-                    case 1:
-                        stack.push(symbol);
-                        vstack.push(lexer.yytext);
-                        lstack.push(lexer.yylloc);
-                        stack.push(action[1]);
-                        symbol = null;
-                        if (!preErrorSymbol) {
-                            yyleng = lexer.yyleng;
-                            yytext = lexer.yytext;
-                            yylineno = lexer.yylineno;
-                            yyloc = lexer.yylloc;
-                            if (recovering > 0) {
-                                recovering--;
-                            }
-                        } else {
-                            symbol = preErrorSymbol;
-                            preErrorSymbol = null;
-                        }
-                        break;
-                    case 2:
-                        len = this.productions_[action[1]][1];
-                        yyval.$ = vstack[vstack.length - len];
-                        yyval._$ = {
-                            first_line: lstack[lstack.length - (len || 1)].first_line,
-                            last_line: lstack[lstack.length - 1].last_line,
-                            first_column: lstack[lstack.length - (len || 1)].first_column,
-                            last_column: lstack[lstack.length - 1].last_column
-                        };
-                        if (ranges) {
-                            yyval._$.range = [lstack[lstack.length - (len || 1)].range[0], lstack[lstack.length - 1].range[1]];
-                        }
-                        r = this.performAction.apply(yyval, [yytext, yyleng, yylineno, sharedState.yy, action[1], vstack, lstack].concat(args));
-                        if (typeof r !== 'undefined') {
-                            return r;
-                        }
-                        if (len) {
-                            stack = stack.slice(0, -1 * len * 2);
-                            vstack = vstack.slice(0, -1 * len);
-                            lstack = lstack.slice(0, -1 * len);
-                        }
-                        stack.push(this.productions_[action[1]][0]);
-                        vstack.push(yyval.$);
-                        lstack.push(yyval._$);
-                        newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
-                        stack.push(newState);
-                        break;
-                    case 3:
-                        return true;
-                }
+            if (ranges) {
+                yyval._$.range = [
+                    lstack[lstack.length - (len || 1)].range[0],
+                    lstack[lstack.length - 1].range[1]
+                ];
             }
+            r = this.performAction.apply(yyval, [
+                yytext,
+                yyleng,
+                yylineno,
+                sharedState.yy,
+                action[1],
+                vstack,
+                lstack
+            ].concat(args));
+            if (typeof r !== 'undefined') {
+                return r;
+            }
+            if (len) {
+                stack = stack.slice(0, -1 * len * 2);
+                vstack = vstack.slice(0, -1 * len);
+                lstack = lstack.slice(0, -1 * len);
+            }
+            stack.push(this.productions_[action[1]][0]);
+            vstack.push(yyval.$);
+            lstack.push(yyval._$);
+            newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
+            stack.push(newState);
+            break;
+        case 3:
             return true;
-        } };
+        }
+    }
+    return true;
+}};
 
-    /* generated by jison-lex 0.3.4 */
-    var lexer = (function () {
-        var lexer = {
+/* generated by jison-lex 0.3.4 */
+var lexer = (function(){
+var lexer = ({
 
-            EOF: 1,
+EOF:1,
 
-            parseError: function parseError(str, hash) {
-                if (this.yy.parser) {
-                    this.yy.parser.parseError(str, hash);
-                } else {
-                    throw new Error(str);
-                }
-            },
+parseError:function parseError(str, hash) {
+        if (this.yy.parser) {
+            this.yy.parser.parseError(str, hash);
+        } else {
+            throw new Error(str);
+        }
+    },
 
-            // resets the lexer, sets new input
-            setInput: function setInput(input, yy) {
-                this.yy = yy || this.yy || {};
-                this._input = input;
-                this._more = this._backtrack = this.done = false;
-                this.yylineno = this.yyleng = 0;
-                this.yytext = this.matched = this.match = '';
-                this.conditionStack = ['INITIAL'];
-                this.yylloc = {
-                    first_line: 1,
-                    first_column: 0,
-                    last_line: 1,
-                    last_column: 0
-                };
-                if (this.options.ranges) {
-                    this.yylloc.range = [0, 0];
-                }
-                this.offset = 0;
-                return this;
-            },
+// resets the lexer, sets new input
+setInput:function (input, yy) {
+        this.yy = yy || this.yy || {};
+        this._input = input;
+        this._more = this._backtrack = this.done = false;
+        this.yylineno = this.yyleng = 0;
+        this.yytext = this.matched = this.match = '';
+        this.conditionStack = ['INITIAL'];
+        this.yylloc = {
+            first_line: 1,
+            first_column: 0,
+            last_line: 1,
+            last_column: 0
+        };
+        if (this.options.ranges) {
+            this.yylloc.range = [0,0];
+        }
+        this.offset = 0;
+        return this;
+    },
 
-            // consumes and returns one char from the input
-            input: function input() {
-                var ch = this._input[0];
-                this.yytext += ch;
-                this.yyleng++;
-                this.offset++;
-                this.match += ch;
-                this.matched += ch;
-                var lines = ch.match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno++;
-                    this.yylloc.last_line++;
-                } else {
-                    this.yylloc.last_column++;
-                }
-                if (this.options.ranges) {
-                    this.yylloc.range[1]++;
-                }
+// consumes and returns one char from the input
+input:function () {
+        var ch = this._input[0];
+        this.yytext += ch;
+        this.yyleng++;
+        this.offset++;
+        this.match += ch;
+        this.matched += ch;
+        var lines = ch.match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno++;
+            this.yylloc.last_line++;
+        } else {
+            this.yylloc.last_column++;
+        }
+        if (this.options.ranges) {
+            this.yylloc.range[1]++;
+        }
 
-                this._input = this._input.slice(1);
-                return ch;
-            },
+        this._input = this._input.slice(1);
+        return ch;
+    },
 
-            // unshifts one char (or a string) into the input
-            unput: function unput(ch) {
-                var len = ch.length;
-                var lines = ch.split(/(?:\r\n?|\n)/g);
+// unshifts one char (or a string) into the input
+unput:function (ch) {
+        var len = ch.length;
+        var lines = ch.split(/(?:\r\n?|\n)/g);
 
-                this._input = ch + this._input;
-                this.yytext = this.yytext.substr(0, this.yytext.length - len);
-                //this.yyleng -= len;
-                this.offset -= len;
-                var oldLines = this.match.split(/(?:\r\n?|\n)/g);
-                this.match = this.match.substr(0, this.match.length - 1);
-                this.matched = this.matched.substr(0, this.matched.length - 1);
+        this._input = ch + this._input;
+        this.yytext = this.yytext.substr(0, this.yytext.length - len);
+        //this.yyleng -= len;
+        this.offset -= len;
+        var oldLines = this.match.split(/(?:\r\n?|\n)/g);
+        this.match = this.match.substr(0, this.match.length - 1);
+        this.matched = this.matched.substr(0, this.matched.length - 1);
 
-                if (lines.length - 1) {
-                    this.yylineno -= lines.length - 1;
-                }
-                var r = this.yylloc.range;
+        if (lines.length - 1) {
+            this.yylineno -= lines.length - 1;
+        }
+        var r = this.yylloc.range;
 
-                this.yylloc = {
+        this.yylloc = {
+            first_line: this.yylloc.first_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.first_column,
+            last_column: lines ?
+                (lines.length === oldLines.length ? this.yylloc.first_column : 0)
+                 + oldLines[oldLines.length - lines.length].length - lines[0].length :
+              this.yylloc.first_column - len
+        };
+
+        if (this.options.ranges) {
+            this.yylloc.range = [r[0], r[0] + this.yyleng - len];
+        }
+        this.yyleng = this.yytext.length;
+        return this;
+    },
+
+// When called from action, caches matched text and appends it on next action
+more:function () {
+        this._more = true;
+        return this;
+    },
+
+// When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
+reject:function () {
+        if (this.options.backtrack_lexer) {
+            this._backtrack = true;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+
+        }
+        return this;
+    },
+
+// retain first n characters of the match
+less:function (n) {
+        this.unput(this.match.slice(n));
+    },
+
+// displays already matched input, i.e. for error messages
+pastInput:function () {
+        var past = this.matched.substr(0, this.matched.length - this.match.length);
+        return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
+    },
+
+// displays upcoming input, i.e. for error messages
+upcomingInput:function () {
+        var next = this.match;
+        if (next.length < 20) {
+            next += this._input.substr(0, 20-next.length);
+        }
+        return (next.substr(0,20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
+    },
+
+// displays the character position where the lexing error occurred, i.e. for error messages
+showPosition:function () {
+        var pre = this.pastInput();
+        var c = new Array(pre.length + 1).join("-");
+        return pre + this.upcomingInput() + "\n" + c + "^";
+    },
+
+// test the lexed token: return FALSE when not a match, otherwise return token
+test_match:function (match, indexed_rule) {
+        var token,
+            lines,
+            backup;
+
+        if (this.options.backtrack_lexer) {
+            // save context
+            backup = {
+                yylineno: this.yylineno,
+                yylloc: {
                     first_line: this.yylloc.first_line,
-                    last_line: this.yylineno + 1,
+                    last_line: this.last_line,
                     first_column: this.yylloc.first_column,
-                    last_column: lines ? (lines.length === oldLines.length ? this.yylloc.first_column : 0) + oldLines[oldLines.length - lines.length].length - lines[0].length : this.yylloc.first_column - len
-                };
+                    last_column: this.yylloc.last_column
+                },
+                yytext: this.yytext,
+                match: this.match,
+                matches: this.matches,
+                matched: this.matched,
+                yyleng: this.yyleng,
+                offset: this.offset,
+                _more: this._more,
+                _input: this._input,
+                yy: this.yy,
+                conditionStack: this.conditionStack.slice(0),
+                done: this.done
+            };
+            if (this.options.ranges) {
+                backup.yylloc.range = this.yylloc.range.slice(0);
+            }
+        }
 
-                if (this.options.ranges) {
-                    this.yylloc.range = [r[0], r[0] + this.yyleng - len];
-                }
-                this.yyleng = this.yytext.length;
-                return this;
-            },
+        lines = match[0].match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno += lines.length;
+        }
+        this.yylloc = {
+            first_line: this.yylloc.last_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.last_column,
+            last_column: lines ?
+                         lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length :
+                         this.yylloc.last_column + match[0].length
+        };
+        this.yytext += match[0];
+        this.match += match[0];
+        this.matches = match;
+        this.yyleng = this.yytext.length;
+        if (this.options.ranges) {
+            this.yylloc.range = [this.offset, this.offset += this.yyleng];
+        }
+        this._more = false;
+        this._backtrack = false;
+        this._input = this._input.slice(match[0].length);
+        this.matched += match[0];
+        token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
+        if (this.done && this._input) {
+            this.done = false;
+        }
+        if (token) {
+            return token;
+        } else if (this._backtrack) {
+            // recover context
+            for (var k in backup) {
+                this[k] = backup[k];
+            }
+            return false; // rule action called reject() implying the next rule should be tested instead.
+        }
+        return false;
+    },
 
-            // When called from action, caches matched text and appends it on next action
-            more: function more() {
-                this._more = true;
-                return this;
-            },
+// return next match in input
+next:function () {
+        if (this.done) {
+            return this.EOF;
+        }
+        if (!this._input) {
+            this.done = true;
+        }
 
-            // When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
-            reject: function reject() {
+        var token,
+            match,
+            tempMatch,
+            index;
+        if (!this._more) {
+            this.yytext = '';
+            this.match = '';
+        }
+        var rules = this._currentRules();
+        for (var i = 0; i < rules.length; i++) {
+            tempMatch = this._input.match(this.rules[rules[i]]);
+            if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
+                match = tempMatch;
+                index = i;
                 if (this.options.backtrack_lexer) {
-                    this._backtrack = true;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-                return this;
-            },
-
-            // retain first n characters of the match
-            less: function less(n) {
-                this.unput(this.match.slice(n));
-            },
-
-            // displays already matched input, i.e. for error messages
-            pastInput: function pastInput() {
-                var past = this.matched.substr(0, this.matched.length - this.match.length);
-                return (past.length > 20 ? '...' : '') + past.substr(-20).replace(/\n/g, "");
-            },
-
-            // displays upcoming input, i.e. for error messages
-            upcomingInput: function upcomingInput() {
-                var next = this.match;
-                if (next.length < 20) {
-                    next += this._input.substr(0, 20 - next.length);
-                }
-                return (next.substr(0, 20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
-            },
-
-            // displays the character position where the lexing error occurred, i.e. for error messages
-            showPosition: function showPosition() {
-                var pre = this.pastInput();
-                var c = new Array(pre.length + 1).join("-");
-                return pre + this.upcomingInput() + "\n" + c + "^";
-            },
-
-            // test the lexed token: return FALSE when not a match, otherwise return token
-            test_match: function test_match(match, indexed_rule) {
-                var token, lines, backup;
-
-                if (this.options.backtrack_lexer) {
-                    // save context
-                    backup = {
-                        yylineno: this.yylineno,
-                        yylloc: {
-                            first_line: this.yylloc.first_line,
-                            last_line: this.last_line,
-                            first_column: this.yylloc.first_column,
-                            last_column: this.yylloc.last_column
-                        },
-                        yytext: this.yytext,
-                        match: this.match,
-                        matches: this.matches,
-                        matched: this.matched,
-                        yyleng: this.yyleng,
-                        offset: this.offset,
-                        _more: this._more,
-                        _input: this._input,
-                        yy: this.yy,
-                        conditionStack: this.conditionStack.slice(0),
-                        done: this.done
-                    };
-                    if (this.options.ranges) {
-                        backup.yylloc.range = this.yylloc.range.slice(0);
-                    }
-                }
-
-                lines = match[0].match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno += lines.length;
-                }
-                this.yylloc = {
-                    first_line: this.yylloc.last_line,
-                    last_line: this.yylineno + 1,
-                    first_column: this.yylloc.last_column,
-                    last_column: lines ? lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length : this.yylloc.last_column + match[0].length
-                };
-                this.yytext += match[0];
-                this.match += match[0];
-                this.matches = match;
-                this.yyleng = this.yytext.length;
-                if (this.options.ranges) {
-                    this.yylloc.range = [this.offset, this.offset += this.yyleng];
-                }
-                this._more = false;
-                this._backtrack = false;
-                this._input = this._input.slice(match[0].length);
-                this.matched += match[0];
-                token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
-                if (this.done && this._input) {
-                    this.done = false;
-                }
-                if (token) {
-                    return token;
-                } else if (this._backtrack) {
-                    // recover context
-                    for (var k in backup) {
-                        this[k] = backup[k];
-                    }
-                    return false; // rule action called reject() implying the next rule should be tested instead.
-                }
-                return false;
-            },
-
-            // return next match in input
-            next: function next() {
-                if (this.done) {
-                    return this.EOF;
-                }
-                if (!this._input) {
-                    this.done = true;
-                }
-
-                var token, match, tempMatch, index;
-                if (!this._more) {
-                    this.yytext = '';
-                    this.match = '';
-                }
-                var rules = this._currentRules();
-                for (var i = 0; i < rules.length; i++) {
-                    tempMatch = this._input.match(this.rules[rules[i]]);
-                    if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
-                        match = tempMatch;
-                        index = i;
-                        if (this.options.backtrack_lexer) {
-                            token = this.test_match(tempMatch, rules[i]);
-                            if (token !== false) {
-                                return token;
-                            } else if (this._backtrack) {
-                                match = false;
-                                continue; // rule action called reject() implying a rule MISmatch.
-                            } else {
-                                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                                    return false;
-                                }
-                        } else if (!this.options.flex) {
-                            break;
-                        }
-                    }
-                }
-                if (match) {
-                    token = this.test_match(match, rules[index]);
+                    token = this.test_match(tempMatch, rules[i]);
                     if (token !== false) {
                         return token;
+                    } else if (this._backtrack) {
+                        match = false;
+                        continue; // rule action called reject() implying a rule MISmatch.
+                    } else {
+                        // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+                        return false;
                     }
-                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                    return false;
+                } else if (!this.options.flex) {
+                    break;
                 }
-                if (this._input === "") {
-                    return this.EOF;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-            },
+            }
+        }
+        if (match) {
+            token = this.test_match(match, rules[index]);
+            if (token !== false) {
+                return token;
+            }
+            // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+            return false;
+        }
+        if (this._input === "") {
+            return this.EOF;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+        }
+    },
 
-            // return next match that has a token
-            lex: function lex() {
-                var r = this.next();
-                if (r) {
-                    return r;
-                } else {
-                    return this.lex();
-                }
-            },
+// return next match that has a token
+lex:function lex() {
+        var r = this.next();
+        if (r) {
+            return r;
+        } else {
+            return this.lex();
+        }
+    },
 
-            // activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
-            begin: function begin(condition) {
-                this.conditionStack.push(condition);
-            },
+// activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
+begin:function begin(condition) {
+        this.conditionStack.push(condition);
+    },
 
-            // pop the previously active lexer condition state off the condition stack
-            popState: function popState() {
-                var n = this.conditionStack.length - 1;
-                if (n > 0) {
-                    return this.conditionStack.pop();
-                } else {
-                    return this.conditionStack[0];
-                }
-            },
+// pop the previously active lexer condition state off the condition stack
+popState:function popState() {
+        var n = this.conditionStack.length - 1;
+        if (n > 0) {
+            return this.conditionStack.pop();
+        } else {
+            return this.conditionStack[0];
+        }
+    },
 
-            // produce the lexer rule set which is active for the currently active lexer condition state
-            _currentRules: function _currentRules() {
-                if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
-                    return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
-                } else {
-                    return this.conditions["INITIAL"].rules;
-                }
-            },
+// produce the lexer rule set which is active for the currently active lexer condition state
+_currentRules:function _currentRules() {
+        if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
+            return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
+        } else {
+            return this.conditions["INITIAL"].rules;
+        }
+    },
 
-            // return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
-            topState: function topState(n) {
-                n = this.conditionStack.length - 1 - Math.abs(n || 0);
-                if (n >= 0) {
-                    return this.conditionStack[n];
-                } else {
-                    return "INITIAL";
-                }
-            },
+// return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
+topState:function topState(n) {
+        n = this.conditionStack.length - 1 - Math.abs(n || 0);
+        if (n >= 0) {
+            return this.conditionStack[n];
+        } else {
+            return "INITIAL";
+        }
+    },
 
-            // alias for begin(condition)
-            pushState: function pushState(condition) {
-                this.begin(condition);
-            },
+// alias for begin(condition)
+pushState:function pushState(condition) {
+        this.begin(condition);
+    },
 
-            // return the number of states currently on the stack
-            stateStackSize: function stateStackSize() {
-                return this.conditionStack.length;
-            },
-            options: {},
-            performAction: function anonymous(yy, yy_, $avoiding_name_collisions, YY_START) {
-                var YYSTATE = YY_START;
-                switch ($avoiding_name_collisions) {
-                    case 0:
-                        /* do nothing */
-                        break;
-                    case 1:
-                        this.begin("string");
-                        break;
-                    case 2:
-                        this.popState();
-                        break;
-                    case 3:
-                        return "STR";
-                        break;
-                    case 4:
-                        return 71;
-                        break;
-                    case 5:
-                        return 78;
-                        break;
-                    case 6:
-                        return 72;
-                        break;
-                    case 7:
-                        return 73;
-                        break;
-                    case 8:
-                        return 74;
-                        break;
-                    case 9:
-                        return 75;
-                        break;
-                    case 10:
-                        return 12;
-                        break;
-                    case 11:
-                        return 30;
-                        break;
-                    case 12:
-                        return 32;
-                        break;
-                    case 13:
-                        return 13;
-                        break;
-                    case 14:
-                        return 13;
-                        break;
-                    case 15:
-                        return 13;
-                        break;
-                    case 16:
-                        return 13;
-                        break;
-                    case 17:
-                        return 13;
-                        break;
-                    case 18:
-                        return 13;
-                        break;
-                    case 19:
-                        return 81;
-                        break;
-                    case 20:
-                        return 90;
-                        break;
-                    case 21:
-                        return 88;
-                        break;
-                    case 22:
-                        return 8;
-                        break;
-                    case 23:
-                        return 85;
-                        break;
-                    case 24:
-                        return 97;
-                        break;
-                    case 25:
-                        return 16;
-                        break;
-                    case 26:
-                        return 15;
-                        break;
-                    case 27:
-                        return 17;
-                        break;
-                    case 28:
-                        return 18;
-                        break;
-                    case 29:
-                        return 53;
-                        break;
-                    case 30:
-                        return 51;
-                        break;
-                    case 31:
-                        return 52;
-                        break;
-                    case 32:
-                        return 54;
-                        break;
-                    case 33:
-                        return 58;
-                        break;
-                    case 34:
-                        return 56;
-                        break;
-                    case 35:
-                        return 57;
-                        break;
-                    case 36:
-                        return 59;
-                        break;
-                    case 37:
-                        return 58;
-                        break;
-                    case 38:
-                        return 56;
-                        break;
-                    case 39:
-                        return 57;
-                        break;
-                    case 40:
-                        return 59;
-                        break;
-                    case 41:
-                        return 63;
-                        break;
-                    case 42:
-                        return 61;
-                        break;
-                    case 43:
-                        return 62;
-                        break;
-                    case 44:
-                        return 64;
-                        break;
-                    case 45:
-                        return 50;
-                        break;
-                    case 46:
-                        return 55;
-                        break;
-                    case 47:
-                        return 60;
-                        break;
-                    case 48:
-                        return 40;
-                        break;
-                    case 49:
-                        return 41;
-                        break;
-                    case 50:
-                        return 46;
-                        break;
-                    case 51:
-                        return 91;
-                        break;
-                    case 52:
-                        return 95;
-                        break;
-                    case 53:
-                        return 83;
-                        break;
-                    case 54:
-                        return 96;
-                        break;
-                    case 55:
-                        return 96;
-                        break;
-                    case 56:
-                        return 87;
-                        break;
-                    case 57:
-                        return 93;
-                        break;
-                    case 58:
-                        return 94;
-                        break;
-                    case 59:
-                        return 65;
-                        break;
-                    case 60:
-                        return 38;
-                        break;
-                    case 61:
-                        return 39;
-                        break;
-                    case 62:
-                        return 36;
-                        break;
-                    case 63:
-                        return 37;
-                        break;
-                    case 64:
-                        return 42;
-                        break;
-                    case 65:
-                        return 43;
-                        break;
-                    case 66:
-                        return 100;
-                        break;
-                    case 67:
-                        return 9;
-                        break;
-                    case 68:
-                        return 10;
-                        break;
-                    case 69:
-                        return 11;
-                        break;
-                }
-            },
-            rules: [/^(?:%%[^\n]*)/, /^(?:["])/, /^(?:["])/, /^(?:[^"]*)/, /^(?:style\b)/, /^(?:default\b)/, /^(?:linkStyle\b)/, /^(?:classDef\b)/, /^(?:class\b)/, /^(?:click\b)/, /^(?:graph\b)/, /^(?:subgraph\b)/, /^(?:end\b\s*)/, /^(?:LR\b)/, /^(?:RL\b)/, /^(?:TB\b)/, /^(?:BT\b)/, /^(?:TD\b)/, /^(?:BR\b)/, /^(?:[0-9]+)/, /^(?:#)/, /^(?::)/, /^(?:;)/, /^(?:,)/, /^(?:\*)/, /^(?:<)/, /^(?:>)/, /^(?:\^)/, /^(?:v\b)/, /^(?:\s*--[x]\s*)/, /^(?:\s*-->\s*)/, /^(?:\s*--[o]\s*)/, /^(?:\s*---\s*)/, /^(?:\s*-\.-[x]\s*)/, /^(?:\s*-\.->\s*)/, /^(?:\s*-\.-[o]\s*)/, /^(?:\s*-\.-\s*)/, /^(?:\s*.-[x]\s*)/, /^(?:\s*\.->\s*)/, /^(?:\s*\.-[o]\s*)/, /^(?:\s*\.-\s*)/, /^(?:\s*==[x]\s*)/, /^(?:\s*==>\s*)/, /^(?:\s*==[o]\s*)/, /^(?:\s*==[\=]\s*)/, /^(?:\s*--\s*)/, /^(?:\s*-\.\s*)/, /^(?:\s*==\s*)/, /^(?:\(-)/, /^(?:-\))/, /^(?:-)/, /^(?:\.)/, /^(?:\+)/, /^(?:%)/, /^(?:=)/, /^(?:=)/, /^(?:[A-Za-z]+)/, /^(?:[!"#$%&'*+,-.`?\\_\/])/, /^(?:[\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6]|[\u00F8-\u02C1\u02C6-\u02D1\u02E0-\u02E4\u02EC\u02EE\u0370-\u0374\u0376\u0377]|[\u037A-\u037D\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03F5]|[\u03F7-\u0481\u048A-\u0527\u0531-\u0556\u0559\u0561-\u0587\u05D0-\u05EA]|[\u05F0-\u05F2\u0620-\u064A\u066E\u066F\u0671-\u06D3\u06D5\u06E5\u06E6\u06EE]|[\u06EF\u06FA-\u06FC\u06FF\u0710\u0712-\u072F\u074D-\u07A5\u07B1\u07CA-\u07EA]|[\u07F4\u07F5\u07FA\u0800-\u0815\u081A\u0824\u0828\u0840-\u0858\u08A0]|[\u08A2-\u08AC\u0904-\u0939\u093D\u0950\u0958-\u0961\u0971-\u0977]|[\u0979-\u097F\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2]|[\u09B6-\u09B9\u09BD\u09CE\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A]|[\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39]|[\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8]|[\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AD0\u0AE0\u0AE1\u0B05-\u0B0C]|[\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B35-\u0B39\u0B3D\u0B5C]|[\u0B5D\u0B5F-\u0B61\u0B71\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99]|[\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB9\u0BD0]|[\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3D]|[\u0C58\u0C59\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3]|[\u0CB5-\u0CB9\u0CBD\u0CDE\u0CE0\u0CE1\u0CF1\u0CF2\u0D05-\u0D0C\u0D0E-\u0D10]|[\u0D12-\u0D3A\u0D3D\u0D4E\u0D60\u0D61\u0D7A-\u0D7F\u0D85-\u0D96\u0D9A-\u0DB1]|[\u0DB3-\u0DBB\u0DBD\u0DC0-\u0DC6\u0E01-\u0E30\u0E32\u0E33\u0E40-\u0E46\u0E81]|[\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3]|[\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD-\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0EC6]|[\u0EDC-\u0EDF\u0F00\u0F40-\u0F47\u0F49-\u0F6C\u0F88-\u0F8C\u1000-\u102A]|[\u103F\u1050-\u1055\u105A-\u105D\u1061\u1065\u1066\u106E-\u1070\u1075-\u1081]|[\u108E\u10A0-\u10C5\u10C7\u10CD\u10D0-\u10FA\u10FC-\u1248\u124A-\u124D]|[\u1250-\u1256\u1258\u125A-\u125D\u1260-\u1288\u128A-\u128D\u1290-\u12B0]|[\u12B2-\u12B5\u12B8-\u12BE\u12C0\u12C2-\u12C5\u12C8-\u12D6\u12D8-\u1310]|[\u1312-\u1315\u1318-\u135A\u1380-\u138F\u13A0-\u13F4\u1401-\u166C]|[\u166F-\u167F\u1681-\u169A\u16A0-\u16EA\u1700-\u170C\u170E-\u1711]|[\u1720-\u1731\u1740-\u1751\u1760-\u176C\u176E-\u1770\u1780-\u17B3\u17D7]|[\u17DC\u1820-\u1877\u1880-\u18A8\u18AA\u18B0-\u18F5\u1900-\u191C]|[\u1950-\u196D\u1970-\u1974\u1980-\u19AB\u19C1-\u19C7\u1A00-\u1A16]|[\u1A20-\u1A54\u1AA7\u1B05-\u1B33\u1B45-\u1B4B\u1B83-\u1BA0\u1BAE\u1BAF]|[\u1BBA-\u1BE5\u1C00-\u1C23\u1C4D-\u1C4F\u1C5A-\u1C7D\u1CE9-\u1CEC]|[\u1CEE-\u1CF1\u1CF5\u1CF6\u1D00-\u1DBF\u1E00-\u1F15\u1F18-\u1F1D]|[\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D]|[\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3]|[\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2071\u207F]|[\u2090-\u209C\u2102\u2107\u210A-\u2113\u2115\u2119-\u211D\u2124\u2126\u2128]|[\u212A-\u212D\u212F-\u2139\u213C-\u213F\u2145-\u2149\u214E\u2183\u2184]|[\u2C00-\u2C2E\u2C30-\u2C5E\u2C60-\u2CE4\u2CEB-\u2CEE\u2CF2\u2CF3]|[\u2D00-\u2D25\u2D27\u2D2D\u2D30-\u2D67\u2D6F\u2D80-\u2D96\u2DA0-\u2DA6]|[\u2DA8-\u2DAE\u2DB0-\u2DB6\u2DB8-\u2DBE\u2DC0-\u2DC6\u2DC8-\u2DCE]|[\u2DD0-\u2DD6\u2DD8-\u2DDE\u2E2F\u3005\u3006\u3031-\u3035\u303B\u303C]|[\u3041-\u3096\u309D-\u309F\u30A1-\u30FA\u30FC-\u30FF\u3105-\u312D]|[\u3131-\u318E\u31A0-\u31BA\u31F0-\u31FF\u3400-\u4DB5\u4E00-\u9FCC]|[\uA000-\uA48C\uA4D0-\uA4FD\uA500-\uA60C\uA610-\uA61F\uA62A\uA62B]|[\uA640-\uA66E\uA67F-\uA697\uA6A0-\uA6E5\uA717-\uA71F\uA722-\uA788]|[\uA78B-\uA78E\uA790-\uA793\uA7A0-\uA7AA\uA7F8-\uA801\uA803-\uA805]|[\uA807-\uA80A\uA80C-\uA822\uA840-\uA873\uA882-\uA8B3\uA8F2-\uA8F7\uA8FB]|[\uA90A-\uA925\uA930-\uA946\uA960-\uA97C\uA984-\uA9B2\uA9CF\uAA00-\uAA28]|[\uAA40-\uAA42\uAA44-\uAA4B\uAA60-\uAA76\uAA7A\uAA80-\uAAAF\uAAB1\uAAB5]|[\uAAB6\uAAB9-\uAABD\uAAC0\uAAC2\uAADB-\uAADD\uAAE0-\uAAEA\uAAF2-\uAAF4]|[\uAB01-\uAB06\uAB09-\uAB0E\uAB11-\uAB16\uAB20-\uAB26\uAB28-\uAB2E]|[\uABC0-\uABE2\uAC00-\uD7A3\uD7B0-\uD7C6\uD7CB-\uD7FB\uF900-\uFA6D]|[\uFA70-\uFAD9\uFB00-\uFB06\uFB13-\uFB17\uFB1D\uFB1F-\uFB28\uFB2A-\uFB36]|[\uFB38-\uFB3C\uFB3E\uFB40\uFB41\uFB43\uFB44\uFB46-\uFBB1\uFBD3-\uFD3D]|[\uFD50-\uFD8F\uFD92-\uFDC7\uFDF0-\uFDFB\uFE70-\uFE74\uFE76-\uFEFC]|[\uFF21-\uFF3A\uFF41-\uFF5A\uFF66-\uFFBE\uFFC2-\uFFC7\uFFCA-\uFFCF]|[\uFFD2-\uFFD7\uFFDA-\uFFDC])/, /^(?:\|)/, /^(?:\()/, /^(?:\))/, /^(?:\[)/, /^(?:\])/, /^(?:\{)/, /^(?:\})/, /^(?:")/, /^(?:\n+)/, /^(?:\s)/, /^(?:$)/],
-            conditions: { "string": { "rules": [2, 3], "inclusive": false }, "INITIAL": { "rules": [0, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69], "inclusive": true } }
-        };
-        return lexer;
-    })();
-    parser.lexer = lexer;
-    function Parser() {
-        this.yy = {};
-    }
-    Parser.prototype = parser;parser.Parser = Parser;
-    return new Parser();
+// return the number of states currently on the stack
+stateStackSize:function stateStackSize() {
+        return this.conditionStack.length;
+    },
+options: {},
+performAction: function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
+var YYSTATE=YY_START;
+switch($avoiding_name_collisions) {
+case 0:/* do nothing */
+break;
+case 1:this.begin("string");
+break;
+case 2:this.popState();
+break;
+case 3:return "STR";
+break;
+case 4:return 71;
+break;
+case 5:return 78;
+break;
+case 6:return 72;
+break;
+case 7:return 73;
+break;
+case 8:return 74;
+break;
+case 9:return 75;
+break;
+case 10:return 12;
+break;
+case 11:return 30;
+break;
+case 12:return 32;
+break;
+case 13:return 13;
+break;
+case 14:return 13;
+break;
+case 15:return 13;
+break;
+case 16:return 13;
+break;
+case 17:return 13;
+break;
+case 18:return 13;
+break;
+case 19:return 81;
+break;
+case 20:return 90;
+break;
+case 21:return 88;
+break;
+case 22:return 8;
+break;
+case 23:return 85;
+break;
+case 24:return 97;
+break;
+case 25:return 16;
+break;
+case 26:return 15;
+break;
+case 27:return 17;
+break;
+case 28:return 18;
+break;
+case 29:return 53;
+break;
+case 30:return 51;
+break;
+case 31:return 52;
+break;
+case 32:return 54;
+break;
+case 33:return 58;
+break;
+case 34:return 56;
+break;
+case 35:return 57;
+break;
+case 36:return 59;
+break;
+case 37:return 58;
+break;
+case 38:return 56;
+break;
+case 39:return 57;
+break;
+case 40:return 59;
+break;
+case 41:return 63;
+break;
+case 42:return 61;
+break;
+case 43:return 62;
+break;
+case 44:return 64;
+break;
+case 45:return 50;
+break;
+case 46:return 55;
+break;
+case 47:return 60;
+break;
+case 48:return 40;
+break;
+case 49:return 41;
+break;
+case 50:return 46;
+break;
+case 51:return 91;
+break;
+case 52:return 95;
+break;
+case 53:return 83;
+break;
+case 54:return 96;
+break;
+case 55:return 96;
+break;
+case 56:return 87;
+break;
+case 57:return 93;
+break;
+case 58:return 94;
+break;
+case 59:return 65;
+break;
+case 60:return 38;
+break;
+case 61:return 39;
+break;
+case 62:return 36;
+break;
+case 63:return 37;
+break;
+case 64:return 42
+break;
+case 65:return 43
+break;
+case 66:return 100;
+break;
+case 67:return 9;
+break;
+case 68:return 10;
+break;
+case 69:return 11;
+break;
+}
+},
+rules: [/^(?:%%[^\n]*)/,/^(?:["])/,/^(?:["])/,/^(?:[^"]*)/,/^(?:style\b)/,/^(?:default\b)/,/^(?:linkStyle\b)/,/^(?:classDef\b)/,/^(?:class\b)/,/^(?:click\b)/,/^(?:graph\b)/,/^(?:subgraph\b)/,/^(?:end\b\s*)/,/^(?:LR\b)/,/^(?:RL\b)/,/^(?:TB\b)/,/^(?:BT\b)/,/^(?:TD\b)/,/^(?:BR\b)/,/^(?:[0-9]+)/,/^(?:#)/,/^(?::)/,/^(?:;)/,/^(?:,)/,/^(?:\*)/,/^(?:<)/,/^(?:>)/,/^(?:\^)/,/^(?:v\b)/,/^(?:\s*--[x]\s*)/,/^(?:\s*-->\s*)/,/^(?:\s*--[o]\s*)/,/^(?:\s*---\s*)/,/^(?:\s*-\.-[x]\s*)/,/^(?:\s*-\.->\s*)/,/^(?:\s*-\.-[o]\s*)/,/^(?:\s*-\.-\s*)/,/^(?:\s*.-[x]\s*)/,/^(?:\s*\.->\s*)/,/^(?:\s*\.-[o]\s*)/,/^(?:\s*\.-\s*)/,/^(?:\s*==[x]\s*)/,/^(?:\s*==>\s*)/,/^(?:\s*==[o]\s*)/,/^(?:\s*==[\=]\s*)/,/^(?:\s*--\s*)/,/^(?:\s*-\.\s*)/,/^(?:\s*==\s*)/,/^(?:\(-)/,/^(?:-\))/,/^(?:-)/,/^(?:\.)/,/^(?:\+)/,/^(?:%)/,/^(?:=)/,/^(?:=)/,/^(?:[A-Za-z]+)/,/^(?:[!"#$%&'*+,-.`?\\_\/])/,/^(?:[\u00AA\u00B5\u00BA\u00C0-\u00D6\u00D8-\u00F6]|[\u00F8-\u02C1\u02C6-\u02D1\u02E0-\u02E4\u02EC\u02EE\u0370-\u0374\u0376\u0377]|[\u037A-\u037D\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03F5]|[\u03F7-\u0481\u048A-\u0527\u0531-\u0556\u0559\u0561-\u0587\u05D0-\u05EA]|[\u05F0-\u05F2\u0620-\u064A\u066E\u066F\u0671-\u06D3\u06D5\u06E5\u06E6\u06EE]|[\u06EF\u06FA-\u06FC\u06FF\u0710\u0712-\u072F\u074D-\u07A5\u07B1\u07CA-\u07EA]|[\u07F4\u07F5\u07FA\u0800-\u0815\u081A\u0824\u0828\u0840-\u0858\u08A0]|[\u08A2-\u08AC\u0904-\u0939\u093D\u0950\u0958-\u0961\u0971-\u0977]|[\u0979-\u097F\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2]|[\u09B6-\u09B9\u09BD\u09CE\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A]|[\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39]|[\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8]|[\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AD0\u0AE0\u0AE1\u0B05-\u0B0C]|[\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B35-\u0B39\u0B3D\u0B5C]|[\u0B5D\u0B5F-\u0B61\u0B71\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99]|[\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB9\u0BD0]|[\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3D]|[\u0C58\u0C59\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3]|[\u0CB5-\u0CB9\u0CBD\u0CDE\u0CE0\u0CE1\u0CF1\u0CF2\u0D05-\u0D0C\u0D0E-\u0D10]|[\u0D12-\u0D3A\u0D3D\u0D4E\u0D60\u0D61\u0D7A-\u0D7F\u0D85-\u0D96\u0D9A-\u0DB1]|[\u0DB3-\u0DBB\u0DBD\u0DC0-\u0DC6\u0E01-\u0E30\u0E32\u0E33\u0E40-\u0E46\u0E81]|[\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3]|[\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD-\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0EC6]|[\u0EDC-\u0EDF\u0F00\u0F40-\u0F47\u0F49-\u0F6C\u0F88-\u0F8C\u1000-\u102A]|[\u103F\u1050-\u1055\u105A-\u105D\u1061\u1065\u1066\u106E-\u1070\u1075-\u1081]|[\u108E\u10A0-\u10C5\u10C7\u10CD\u10D0-\u10FA\u10FC-\u1248\u124A-\u124D]|[\u1250-\u1256\u1258\u125A-\u125D\u1260-\u1288\u128A-\u128D\u1290-\u12B0]|[\u12B2-\u12B5\u12B8-\u12BE\u12C0\u12C2-\u12C5\u12C8-\u12D6\u12D8-\u1310]|[\u1312-\u1315\u1318-\u135A\u1380-\u138F\u13A0-\u13F4\u1401-\u166C]|[\u166F-\u167F\u1681-\u169A\u16A0-\u16EA\u1700-\u170C\u170E-\u1711]|[\u1720-\u1731\u1740-\u1751\u1760-\u176C\u176E-\u1770\u1780-\u17B3\u17D7]|[\u17DC\u1820-\u1877\u1880-\u18A8\u18AA\u18B0-\u18F5\u1900-\u191C]|[\u1950-\u196D\u1970-\u1974\u1980-\u19AB\u19C1-\u19C7\u1A00-\u1A16]|[\u1A20-\u1A54\u1AA7\u1B05-\u1B33\u1B45-\u1B4B\u1B83-\u1BA0\u1BAE\u1BAF]|[\u1BBA-\u1BE5\u1C00-\u1C23\u1C4D-\u1C4F\u1C5A-\u1C7D\u1CE9-\u1CEC]|[\u1CEE-\u1CF1\u1CF5\u1CF6\u1D00-\u1DBF\u1E00-\u1F15\u1F18-\u1F1D]|[\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D]|[\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3]|[\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2071\u207F]|[\u2090-\u209C\u2102\u2107\u210A-\u2113\u2115\u2119-\u211D\u2124\u2126\u2128]|[\u212A-\u212D\u212F-\u2139\u213C-\u213F\u2145-\u2149\u214E\u2183\u2184]|[\u2C00-\u2C2E\u2C30-\u2C5E\u2C60-\u2CE4\u2CEB-\u2CEE\u2CF2\u2CF3]|[\u2D00-\u2D25\u2D27\u2D2D\u2D30-\u2D67\u2D6F\u2D80-\u2D96\u2DA0-\u2DA6]|[\u2DA8-\u2DAE\u2DB0-\u2DB6\u2DB8-\u2DBE\u2DC0-\u2DC6\u2DC8-\u2DCE]|[\u2DD0-\u2DD6\u2DD8-\u2DDE\u2E2F\u3005\u3006\u3031-\u3035\u303B\u303C]|[\u3041-\u3096\u309D-\u309F\u30A1-\u30FA\u30FC-\u30FF\u3105-\u312D]|[\u3131-\u318E\u31A0-\u31BA\u31F0-\u31FF\u3400-\u4DB5\u4E00-\u9FCC]|[\uA000-\uA48C\uA4D0-\uA4FD\uA500-\uA60C\uA610-\uA61F\uA62A\uA62B]|[\uA640-\uA66E\uA67F-\uA697\uA6A0-\uA6E5\uA717-\uA71F\uA722-\uA788]|[\uA78B-\uA78E\uA790-\uA793\uA7A0-\uA7AA\uA7F8-\uA801\uA803-\uA805]|[\uA807-\uA80A\uA80C-\uA822\uA840-\uA873\uA882-\uA8B3\uA8F2-\uA8F7\uA8FB]|[\uA90A-\uA925\uA930-\uA946\uA960-\uA97C\uA984-\uA9B2\uA9CF\uAA00-\uAA28]|[\uAA40-\uAA42\uAA44-\uAA4B\uAA60-\uAA76\uAA7A\uAA80-\uAAAF\uAAB1\uAAB5]|[\uAAB6\uAAB9-\uAABD\uAAC0\uAAC2\uAADB-\uAADD\uAAE0-\uAAEA\uAAF2-\uAAF4]|[\uAB01-\uAB06\uAB09-\uAB0E\uAB11-\uAB16\uAB20-\uAB26\uAB28-\uAB2E]|[\uABC0-\uABE2\uAC00-\uD7A3\uD7B0-\uD7C6\uD7CB-\uD7FB\uF900-\uFA6D]|[\uFA70-\uFAD9\uFB00-\uFB06\uFB13-\uFB17\uFB1D\uFB1F-\uFB28\uFB2A-\uFB36]|[\uFB38-\uFB3C\uFB3E\uFB40\uFB41\uFB43\uFB44\uFB46-\uFBB1\uFBD3-\uFD3D]|[\uFD50-\uFD8F\uFD92-\uFDC7\uFDF0-\uFDFB\uFE70-\uFE74\uFE76-\uFEFC]|[\uFF21-\uFF3A\uFF41-\uFF5A\uFF66-\uFFBE\uFFC2-\uFFC7\uFFCA-\uFFCF]|[\uFFD2-\uFFD7\uFFDA-\uFFDC])/,/^(?:\|)/,/^(?:\()/,/^(?:\))/,/^(?:\[)/,/^(?:\])/,/^(?:\{)/,/^(?:\})/,/^(?:")/,/^(?:\n+)/,/^(?:\s)/,/^(?:$)/],
+conditions: {"string":{"rules":[2,3],"inclusive":false},"INITIAL":{"rules":[0,1,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69],"inclusive":true}}
+});
+return lexer;
+})();
+parser.lexer = lexer;
+function Parser () {
+  this.yy = {};
+}
+Parser.prototype = parser;parser.Parser = Parser;
+return new Parser;
 })();
 
-if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
-    exports.parser = flow;
-    exports.Parser = flow.Parser;
-    exports.parse = function () {
-        return flow.parse.apply(flow, arguments);
-    };
-    exports.main = function commonjsMain(args) {
-        if (!args[1]) {
-            console.log('Usage: ' + args[0] + ' FILE');
-            process.exit(1);
-        }
-        var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
-        return exports.parser.parse(source);
-    };
-    if (typeof module !== 'undefined' && require.main === module) {
-        exports.main(process.argv.slice(1));
-    }
-}
 
-}).call(this,require('_process'))
-},{"_process":3,"fs":1,"path":2}],119:[function(require,module,exports){
+if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
+exports.parser = parser;
+exports.Parser = parser.Parser;
+exports.parse = function () { return parser.parse.apply(parser, arguments); };
+exports.main = function commonjsMain(args) {
+    if (!args[1]) {
+        console.log('Usage: '+args[0]+' FILE');
+        process.exit(1);
+    }
+    var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
+    return exports.parser.parse(source);
+};
+if (typeof module !== 'undefined' && require.main === module) {
+  exports.main(process.argv.slice(1));
+}
+}
+}).call(this,require("1YiZ5S"))
+},{"1YiZ5S":104,"fs":102,"path":103}],119:[function(require,module,exports){
 (function (global){
 /**
  * Created by knut on 15-01-14.
  */
-'use strict';
-
 var moment = require('moment');
 var Logger = require('../../logger');
 var log = new Logger.Log();
+
 
 var dateFormat = '';
 var title = '';
@@ -36006,7 +36286,7 @@ var sections = [];
 var tasks = [];
 var currentSection = '';
 
-exports.clear = function () {
+exports.clear = function(){
     sections = [];
     tasks = [];
     currentSection = '';
@@ -36017,31 +36297,32 @@ exports.clear = function () {
     rawTasks = [];
 };
 
-exports.setDateFormat = function (txt) {
+exports.setDateFormat = function(txt){
     dateFormat = txt;
 };
 
-exports.getDateFormat = function () {
+exports.getDateFormat = function(){
     return dateFormat;
 };
-exports.setTitle = function (txt) {
+exports.setTitle = function(txt){
     title = txt;
 };
 
-exports.getTitle = function () {
+exports.getTitle = function(){
     return title;
 };
 
-exports.addSection = function (txt) {
+exports.addSection = function(txt){
     currentSection = txt;
     sections.push(txt);
 };
 
-exports.getTasks = function () {
+
+exports.getTasks=function(){
     var allItemsPricessed = compileTasks();
     var maxDepth = 10;
     var iterationCount = 0;
-    while (!allItemsPricessed && iterationCount < maxDepth) {
+    while(!allItemsPricessed && (iterationCount < maxDepth)){
         allItemsPricessed = compileTasks();
         iterationCount++;
     }
@@ -36057,7 +36338,8 @@ exports.getTasks = function () {
     return tasks;
 };
 
-var getStartDate = function getStartDate(prevTime, dateFormat, str) {
+
+var getStartDate = function(prevTime, dateFormat, str){
     //console.log('Deciding start date:'+JSON.stringify(str));
     //log.debug('Deciding start date:'+str);
     //log.debug('with dateformat:'+dateFormat);
@@ -36068,12 +36350,12 @@ var getStartDate = function getStartDate(prevTime, dateFormat, str) {
     var re = /^after\s+([\d\w\-]+)/;
     var afterStatement = re.exec(str.trim());
 
-    if (afterStatement !== null) {
+    if(afterStatement!==null){
         var task = exports.findTaskById(afterStatement[1]);
 
-        if (typeof task === 'undefined') {
+        if(typeof task === 'undefined'){
             var dt = new Date();
-            dt.setHours(0, 0, 0, 0);
+            dt.setHours(0,0,0,0);
             return dt;
             //return undefined;
         }
@@ -36081,11 +36363,11 @@ var getStartDate = function getStartDate(prevTime, dateFormat, str) {
     }
 
     // Check for actual date set
-    if (moment(str, dateFormat.trim(), true).isValid()) {
-        return moment(str, dateFormat.trim(), true).toDate();
-    } else {
-        log.debug('Invalid date:' + str);
-        log.debug('With date format:' + dateFormat.trim());
+    if(moment(str,dateFormat.trim(),true).isValid()){
+        return moment(str,dateFormat.trim(),true).toDate();
+    }else{
+        log.debug('Invalid date:'+str);
+        log.debug('With date format:'+dateFormat.trim());
         //log.debug('----');
     }
 
@@ -36093,13 +36375,13 @@ var getStartDate = function getStartDate(prevTime, dateFormat, str) {
     return new Date();
 };
 
-var getEndDate = function getEndDate(prevTime, dateFormat, str) {
+var getEndDate = function(prevTime, dateFormat, str){
     str = str.trim();
 
     // Check for actual date
-    if (moment(str, dateFormat.trim(), true).isValid()) {
+    if(moment(str,dateFormat.trim(),true).isValid()){
 
-        return moment(str, dateFormat.trim()).toDate();
+        return moment(str,dateFormat.trim()).toDate();
     }
 
     var d = moment(prevTime);
@@ -36107,8 +36389,8 @@ var getEndDate = function getEndDate(prevTime, dateFormat, str) {
     var re = /^([\d]+)([wdhms])/;
     var durationStatement = re.exec(str.trim());
 
-    if (durationStatement !== null) {
-        switch (durationStatement[2]) {
+    if(durationStatement!== null){
+        switch(durationStatement[2]){
             case 's':
                 d.add(durationStatement[1], 'seconds');
                 break;
@@ -36132,10 +36414,10 @@ var getEndDate = function getEndDate(prevTime, dateFormat, str) {
 };
 
 var taskCnt = 0;
-var parseId = function parseId(idStr) {
-    if (typeof idStr === 'undefined') {
+var parseId = function(idStr){
+    if(typeof idStr === 'undefined'){
         taskCnt = taskCnt + 1;
-        return 'task' + taskCnt;
+        return 'task'+taskCnt;
     }
     return idStr;
 };
@@ -36150,60 +36432,65 @@ var parseId = function parseId(idStr) {
 // endDate
 // length
 
-var compileData = function compileData(prevTask, dataStr) {
+var compileData = function(prevTask, dataStr){
     var ds;
 
-    if (dataStr.substr(0, 1) === ':') {
-        ds = dataStr.substr(1, dataStr.length);
-    } else {
-        ds = dataStr;
+    if(dataStr.substr(0,1) === ':'){
+        ds = dataStr.substr(1,dataStr.length);
+    }
+    else{
+        ds=dataStr;
     }
 
     var data = ds.split(',');
+
 
     var task = {};
     var df = exports.getDateFormat();
 
+
     // Get tags like active, done cand crit
     var matchFound = true;
-    while (matchFound) {
+    while(matchFound){
         matchFound = false;
-        if (data[0].match(/^\s*active\s*$/)) {
+        if(data[0].match(/^\s*active\s*$/)){
             task.active = true;
             data.shift(1);
             matchFound = true;
+
         }
-        if (data[0].match(/^\s*done\s*$/)) {
+        if(data[0].match(/^\s*done\s*$/)){
             task.done = true;
             data.shift(1);
             matchFound = true;
         }
-        if (data[0].match(/^\s*crit\s*$/)) {
+        if(data[0].match(/^\s*crit\s*$/)){
             task.crit = true;
             data.shift(1);
             matchFound = true;
         }
     }
     var i;
-    for (i = 0; i < data.length; i++) {
+    for(i=0;i<data.length;i++){
         data[i] = data[i].trim();
     }
 
-    switch (data.length) {
+
+    switch(data.length){
         case 1:
             task.id = parseId();
             task.startTime = prevTask.endTime;
-            task.endTime = getEndDate(task.startTime, df, data[0]);
+            task.endTime   = getEndDate(task.startTime, df, data[0]);
             break;
         case 2:
             task.id = parseId();
             task.startTime = getStartDate(undefined, df, data[0]);
-            task.endTime = getEndDate(task.startTime, df, data[1]);
+            task.endTime   = getEndDate(task.startTime, df, data[1]);
             break;
         case 3:
             task.id = parseId(data[0]);
             task.startTime = getStartDate(undefined, df, data[1]);
-            task.endTime = getEndDate(task.startTime, df, data[2]);
+            task.endTime   = getEndDate(task.startTime, df, data[2]);
             break;
         default:
 
@@ -36212,59 +36499,63 @@ var compileData = function compileData(prevTask, dataStr) {
     return task;
 };
 
-var parseData = function parseData(prevTaskId, dataStr) {
+var parseData = function(prevTaskId, dataStr){
     var ds;
 
-    if (dataStr.substr(0, 1) === ':') {
-        ds = dataStr.substr(1, dataStr.length);
-    } else {
-        ds = dataStr;
+    if(dataStr.substr(0,1) === ':'){
+        ds = dataStr.substr(1,dataStr.length);
+    }
+    else{
+        ds=dataStr;
     }
 
     var data = ds.split(',');
+
 
     var task = {};
 
     // Get tags like active, done cand crit
     var matchFound = true;
-    while (matchFound) {
+    while(matchFound){
         matchFound = false;
-        if (data[0].match(/^\s*active\s*$/)) {
+        if(data[0].match(/^\s*active\s*$/)){
             task.active = true;
             data.shift(1);
             matchFound = true;
+
         }
-        if (data[0].match(/^\s*done\s*$/)) {
+        if(data[0].match(/^\s*done\s*$/)){
             task.done = true;
             data.shift(1);
             matchFound = true;
         }
-        if (data[0].match(/^\s*crit\s*$/)) {
+        if(data[0].match(/^\s*crit\s*$/)){
             task.crit = true;
             data.shift(1);
             matchFound = true;
         }
     }
     var i;
-    for (i = 0; i < data.length; i++) {
+    for(i=0;i<data.length;i++){
         data[i] = data[i].trim();
     }
 
-    switch (data.length) {
+
+    switch(data.length){
         case 1:
             task.id = parseId();
-            task.startTime = { type: 'prevTaskEnd', id: prevTaskId };
-            task.endTime = { data: data[0] };
+            task.startTime = {type: 'prevTaskEnd', id:prevTaskId};
+            task.endTime   = {data: data[0]};
             break;
         case 2:
             task.id = parseId();
-            task.startTime = { type: 'getStartDate', startData: data[0] };
-            task.endTime = { data: data[1] };
+            task.startTime = {type:'getStartDate',startData:data[0]};
+            task.endTime   = {data: data[1]};
             break;
         case 3:
             task.id = parseId(data[0]);
-            task.startTime = { type: 'getStartDate', startData: data[1] };
-            task.endTime = { data: data[2] };
+            task.startTime = {type:'getStartDate',startData: data[1]};
+            task.endTime   = {data: data[2]};
             break;
         default:
 
@@ -36272,36 +36563,40 @@ var parseData = function parseData(prevTaskId, dataStr) {
 
     return task;
 };
+
+
 
 var lastTask;
 var lastTaskID;
 var rawTasks = [];
 var taskDb = {};
-exports.addTask = function (descr, data) {
+exports.addTask = function(descr,data){
     var rawTask = {
-        section: currentSection,
-        type: currentSection,
-        processed: false,
-        raw: { data: data },
-        task: descr
+        section:currentSection,
+        type:currentSection,
+        processed:false,
+        raw:{data:data},
+        task:descr
     };
     var taskInfo = parseData(lastTaskID, data);
-    rawTask.raw.startTime = taskInfo.startTime;
-    rawTask.raw.endTime = taskInfo.endTime;
-    rawTask.id = taskInfo.id;
+    rawTask.raw.startTime  = taskInfo.startTime;
+    rawTask.raw.endTime    = taskInfo.endTime;
+    rawTask.id         = taskInfo.id;
     rawTask.prevTaskId = lastTaskID;
-    rawTask.active = taskInfo.active;
-    rawTask.done = taskInfo.done;
-    rawTask.crit = taskInfo.crit;
+    rawTask.active     = taskInfo.active;
+    rawTask.done       = taskInfo.done;
+    rawTask.crit       = taskInfo.crit;
 
     var pos = rawTasks.push(rawTask);
 
     lastTaskID = rawTask.id;
     // Store cross ref
-    taskDb[rawTask.id] = pos - 1;
+    taskDb[rawTask.id]= pos-1;
+
 };
 
-exports.findTaskById = function (id) {
+
+exports.findTaskById = function(id) {
     //var i;
     //for(i=0;i<tasks.length;i++){
     //    if(tasks[i].id === id){
@@ -36313,57 +36608,58 @@ exports.findTaskById = function (id) {
     return rawTasks[pos];
 };
 
-exports.addTaskOrg = function (descr, data) {
+exports.addTaskOrg = function(descr,data){
 
     var newTask = {
-        section: currentSection,
-        type: currentSection,
-        description: descr,
-        task: descr
+        section:currentSection,
+        type:currentSection,
+        description:descr,
+        task:descr
     };
     var taskInfo = compileData(lastTask, data);
     newTask.startTime = taskInfo.startTime;
-    newTask.endTime = taskInfo.endTime;
-    newTask.id = taskInfo.id;
-    newTask.active = taskInfo.active;
-    newTask.done = taskInfo.done;
-    newTask.crit = taskInfo.crit;
+    newTask.endTime   = taskInfo.endTime;
+    newTask.id        = taskInfo.id;
+    newTask.active    = taskInfo.active;
+    newTask.done      = taskInfo.done;
+    newTask.crit      = taskInfo.crit;
     lastTask = newTask;
     tasks.push(newTask);
 };
 
-var compileTasks = function compileTasks() {
+var compileTasks=function(){
     var df = exports.getDateFormat();
 
-    var compileTask = function compileTask(pos) {
+    var compileTask = function(pos){
         var task = rawTasks[pos];
         var startTime = '';
-        switch (rawTasks[pos].raw.startTime.type) {
+        switch(rawTasks[pos].raw.startTime.type){
             case 'prevTaskEnd':
                 var prevTask = exports.findTaskById(task.prevTaskId);
                 task.startTime = prevTask.endTime;
                 break;
             case 'getStartDate':
                 startTime = getStartDate(undefined, df, rawTasks[pos].raw.startTime.startData);
-                if (startTime) {
+                if(startTime){
                     rawTasks[pos].startTime = startTime;
                 }
                 break;
         }
 
-        if (rawTasks[pos].startTime) {
+        if(rawTasks[pos].startTime){
             rawTasks[pos].endTime = getEndDate(rawTasks[pos].startTime, df, rawTasks[pos].raw.endTime.data);
-            if (rawTasks[pos].endTime) {
+            if(rawTasks[pos].endTime){
                 rawTasks[pos].processed = true;
             }
         }
 
         return rawTasks[pos].processed;
+
     };
 
     var i;
     var allProcessed = true;
-    for (i = 0; i < rawTasks.length; i++) {
+    for(i=0;i<rawTasks.length;i++){
         compileTask(i);
 
         allProcessed = allProcessed && rawTasks[i].processed;
@@ -36371,14 +36667,12 @@ var compileTasks = function compileTasks() {
     return allProcessed;
 };
 
-exports.parseError = function (err, hash) {
-    global.mermaidAPI.parseError(err, hash);
+exports.parseError = function(err,hash){
+    global.mermaidAPI.parseError(err,hash);
 };
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../logger":126,"moment":105}],120:[function(require,module,exports){
-'use strict';
-
+}).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../../logger":127,"moment":105}],120:[function(require,module,exports){
 var gantt = require('./parser/gantt').parser;
 gantt.yy = require('./ganttDb');
 var d3 = require('../../d3');
@@ -36415,7 +36709,7 @@ module.exports.draw = function (text, id) {
         w = 1200;
     }
 
-    if (typeof conf.useWidth !== 'undefined') {
+    if(typeof conf.useWidth !== 'undefined'){
         w = conf.useWidth;
     }
 
@@ -36426,29 +36720,35 @@ module.exports.draw = function (text, id) {
 
     elem.setAttribute('height', '100%');
     // Set viewBox
-    elem.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+    elem.setAttribute('viewBox','0 0 '+w+' '+h);
     var svg = d3.select('#' + id);
 
+    
+    
+    
     //var dateFormat = d3.time.format('%Y-%m-%d');
-
+    
     var startDate = d3.min(taskArray, function (d) {
         return d.startTime;
     });
     var endDate = d3.max(taskArray, function (d) {
         return d.endTime;
     });
-
+    
     // Set timescale
-    var timeScale = d3.time.scale().domain([d3.min(taskArray, function (d) {
-        return d.startTime;
-    }), d3.max(taskArray, function (d) {
-        return d.endTime;
-    })]).rangeRound([0, w - 150]);
-    //.nice(d3.time.monday);
+    var timeScale = d3.time.scale()
+        .domain([d3.min(taskArray, function (d) {
+            return d.startTime;
+        }),
+            d3.max(taskArray, function (d) {
+                return d.endTime;
+            })])
+        .rangeRound([0, w - 150]);
+        //.nice(d3.time.monday);
 
     var categories = [];
-
-    daysInChart = moment.duration(endDate - startDate).asDays();
+    
+    daysInChart = moment.duration(endDate-startDate).asDays();
 
     for (var i = 0; i < taskArray.length; i++) {
         categories.push(taskArray[i].type);
@@ -36458,12 +36758,19 @@ module.exports.draw = function (text, id) {
 
     categories = checkUnique(categories);
 
+
     makeGant(taskArray, w, h);
-    if (typeof conf.useWidth !== 'undefined') {
+    if(typeof conf.useWidth !== 'undefined'){
         elem.setAttribute('width', w);
+
     }
 
-    svg.append('text').text(gantt.yy.getTitle()).attr('x', w / 2).attr('y', conf.titleTopMargin).attr('class', 'titleText');
+    svg.append('text')
+        .text(gantt.yy.getTitle())
+        .attr('x', w / 2)
+        .attr('y', conf.titleTopMargin)
+        .attr('class', 'titleText');
+
 
     function makeGant(tasks, pageWidth, pageHeight) {
 
@@ -36472,177 +36779,215 @@ module.exports.draw = function (text, id) {
         var topPadding = conf.topPadding;
         var sidePadding = conf.sidePadding;
 
-        var colorScale = d3.scale.linear().domain([0, categories.length]).range(['#00B9FA', '#F95002']).interpolate(d3.interpolateHcl);
+        var colorScale = d3.scale.linear()
+            .domain([0, categories.length])
+            .range(['#00B9FA', '#F95002'])
+            .interpolate(d3.interpolateHcl);
 
         makeGrid(sidePadding, topPadding, pageWidth, pageHeight);
         drawRects(tasks, gap, topPadding, sidePadding, barHeight, colorScale, pageWidth, pageHeight);
         vertLabels(gap, topPadding, sidePadding, barHeight, colorScale);
         drawToday(sidePadding, topPadding, pageWidth, pageHeight);
+
     }
 
-    function drawRects(theArray, theGap, theTopPad, theSidePad, theBarHeight, theColorScale, w, h) {
-        //eslint-disable-line no-unused-vars
 
-        svg.append('g').selectAll('rect').data(theArray).enter().append('rect').attr('x', 0).attr('y', function (d, i) {
-            return i * theGap + theTopPad - 2;
-        }).attr('width', function () {
-            return w - theSidePad / 2;
-        }).attr('height', theGap).attr('class', function (d) {
-            //eslint-disable-line no-unused-vars
-            for (var i = 0; i < categories.length; i++) {
-                if (d.type === categories[i]) {
-                    return 'section section' + i % conf.numberSectionStyles;
+    function drawRects(theArray, theGap, theTopPad, theSidePad, theBarHeight, theColorScale, w, h) { //eslint-disable-line no-unused-vars
+
+        svg.append('g')
+            .selectAll('rect')
+            .data(theArray)
+            .enter()
+            .append('rect')
+            .attr('x', 0)
+            .attr('y', function (d, i) {
+                return i * theGap + theTopPad - 2;
+            })
+            .attr('width', function () {
+                return w - theSidePad / 2;
+            })
+            .attr('height', theGap)
+            .attr('class', function (d) { //eslint-disable-line no-unused-vars
+                for (var i = 0; i < categories.length; i++) {
+                    if (d.type === categories[i]) {
+                        return 'section section' + (i % conf.numberSectionStyles);
+                    }
                 }
-            }
-            return 'section section0';
-        });
+                return 'section section0';
+            });
 
-        var rectangles = svg.append('g').selectAll('rect').data(theArray).enter();
 
-        rectangles.append('rect').attr('rx', 3).attr('ry', 3).attr('x', function (d) {
-            return timeScale(d.startTime) + theSidePad;
-        }).attr('y', function (d, i) {
-            return i * theGap + theTopPad;
-        }).attr('width', function (d) {
-            return timeScale(d.endTime) - timeScale(d.startTime);
-        }).attr('height', theBarHeight).attr('class', function (d) {
-            var res = 'task ';
+        var rectangles = svg.append('g')
+            .selectAll('rect')
+            .data(theArray)
+            .enter();
 
-            var secNum = 0;
-            for (var i = 0; i < categories.length; i++) {
-                if (d.type === categories[i]) {
-                    secNum = i % conf.numberSectionStyles;
-                }
-            }
 
-            if (d.active) {
-                if (d.crit) {
-                    return res + ' activeCrit' + secNum;
+        rectangles.append('rect')
+                .attr('rx', 3)
+                .attr('ry', 3)
+                .attr('x', function (d) {
+                    return timeScale(d.startTime) + theSidePad;
+                })
+                .attr('y', function (d, i) {
+                    return i * theGap + theTopPad;
+                })
+                .attr('width', function (d) {
+                    return (timeScale(d.endTime) - timeScale(d.startTime));
+                })
+                .attr('height', theBarHeight)
+                .attr('class', function (d) {
+                    var res = 'task ';
+                    
+                    
+                    var secNum = 0;
+                    for (var i = 0; i < categories.length; i++) {
+                        if (d.type === categories[i]) {
+                            secNum = (i % conf.numberSectionStyles);
+                        }
+                    }
+                    
+                    if(d.active){
+                        if (d.crit) {
+                            return res + ' activeCrit'+secNum;
+                        }else{
+                            return res + ' active'+secNum;
+                        }
+                    }
+
+                    if (d.done) {
+                        if (d.crit) {
+                            return res + ' doneCrit'+secNum;
+                        }else{
+                            return res + ' done'+secNum;
+                        }
+                    }
+
+                    if (d.crit) {
+                        return res + ' crit'+secNum;
+                    }
+
+
+                    return res + ' task'+secNum;
+                })
+            ;
+
+
+        rectangles.append('text')
+            .text(function (d) {
+                return d.task;
+            })
+            .attr('font-size',conf.fontSize)
+            //.attr('font-family',conf.fontFamily)
+            .attr('x', function (d) {
+                var startX = timeScale(d.startTime),
+                    endX = timeScale(d.endTime),
+                    textWidth = this.getBBox().width;
+
+                // Check id text width > width of rectangle
+                if (textWidth > (endX - startX)) {
+                    if (endX + textWidth  + 1.5*conf.sidePadding> w) {
+                        return startX + theSidePad - 5;
+                    } else {
+                        return endX + theSidePad + 5;
+                    }
                 } else {
-                    return res + ' active' + secNum;
+                    return (endX - startX) / 2 + startX + theSidePad;
                 }
-            }
+            })
+            .attr('y', function (d, i) {
+                return i * theGap + (conf.barHeight / 2) + (conf.fontSize / 2 - 2) + theTopPad;
+            })
+            //.attr('text-anchor', 'middle')
+            .attr('text-height', theBarHeight)
+            .attr('class', function (d) {
+                var startX = timeScale(d.startTime),
+                    endX = timeScale(d.endTime),
+                    textWidth = this.getBBox().width;
+                var secNum = 0;
+                for (var i = 0; i < categories.length; i++) {
+                    if (d.type === categories[i]) {
+                        secNum = (i % conf.numberSectionStyles);
+                    }
+                }
 
-            if (d.done) {
-                if (d.crit) {
-                    return res + ' doneCrit' + secNum;
+                var taskType = '';
+                if(d.active){
+                    if (d.crit) {
+                        taskType = 'activeCritText'+secNum;
+                    }else{
+                        taskType = 'activeText'+secNum;
+                    }
+                }
+
+                if (d.done) {
+                    if (d.crit) {
+                        taskType = taskType + ' doneCritText'+secNum;
+                    }else{
+                        taskType = taskType + ' doneText'+secNum;
+                    }
+                }else{
+                    if (d.crit) {
+                        taskType = taskType + ' critText'+secNum;
+                    }
+                }
+
+                // Check id text width > width of rectangle
+                if (textWidth > (endX - startX)) {
+                    if (endX + textWidth + 1.5*conf.sidePadding > w) {
+                        return 'taskTextOutsideLeft taskTextOutside' + secNum + ' ' + taskType;
+                    } else {
+                        return 'taskTextOutsideRight taskTextOutside' + secNum+ ' ' + taskType;
+                    }
                 } else {
-                    return res + ' done' + secNum;
+                    return 'taskText taskText' + secNum+ ' ' + taskType;
                 }
-            }
+            });
 
-            if (d.crit) {
-                return res + ' crit' + secNum;
-            }
-
-            return res + ' task' + secNum;
-        });
-
-        rectangles.append('text').text(function (d) {
-            return d.task;
-        }).attr('font-size', conf.fontSize)
-        //.attr('font-family',conf.fontFamily)
-        .attr('x', function (d) {
-            var startX = timeScale(d.startTime),
-                endX = timeScale(d.endTime),
-                textWidth = this.getBBox().width;
-
-            // Check id text width > width of rectangle
-            if (textWidth > endX - startX) {
-                if (endX + textWidth + 1.5 * conf.sidePadding > w) {
-                    return startX + theSidePad - 5;
-                } else {
-                    return endX + theSidePad + 5;
-                }
-            } else {
-                return (endX - startX) / 2 + startX + theSidePad;
-            }
-        }).attr('y', function (d, i) {
-            return i * theGap + conf.barHeight / 2 + (conf.fontSize / 2 - 2) + theTopPad;
-        })
-        //.attr('text-anchor', 'middle')
-        .attr('text-height', theBarHeight).attr('class', function (d) {
-            var startX = timeScale(d.startTime),
-                endX = timeScale(d.endTime),
-                textWidth = this.getBBox().width;
-            var secNum = 0;
-            for (var i = 0; i < categories.length; i++) {
-                if (d.type === categories[i]) {
-                    secNum = i % conf.numberSectionStyles;
-                }
-            }
-
-            var taskType = '';
-            if (d.active) {
-                if (d.crit) {
-                    taskType = 'activeCritText' + secNum;
-                } else {
-                    taskType = 'activeText' + secNum;
-                }
-            }
-
-            if (d.done) {
-                if (d.crit) {
-                    taskType = taskType + ' doneCritText' + secNum;
-                } else {
-                    taskType = taskType + ' doneText' + secNum;
-                }
-            } else {
-                if (d.crit) {
-                    taskType = taskType + ' critText' + secNum;
-                }
-            }
-
-            // Check id text width > width of rectangle
-            if (textWidth > endX - startX) {
-                if (endX + textWidth + 1.5 * conf.sidePadding > w) {
-                    return 'taskTextOutsideLeft taskTextOutside' + secNum + ' ' + taskType;
-                } else {
-                    return 'taskTextOutsideRight taskTextOutside' + secNum + ' ' + taskType;
-                }
-            } else {
-                return 'taskText taskText' + secNum + ' ' + taskType;
-            }
-        });
     }
+
 
     function makeGrid(theSidePad, theTopPad, w, h) {
 
-        var pre = [['.%L', function (d) {
-            return d.getMilliseconds();
-        }], [':%S', function (d) {
-            return d.getSeconds();
-        }],
-        // Within a hour
-        ['h1 %I:%M', function (d) {
-            return d.getMinutes();
-        }]];
-        var post = [['%Y', function () {
-            return true;
-        }]];
-
-        var mid = [
-        // Within a day
-        ['%I:%M', function (d) {
-            return d.getHours();
-        }],
-        // Day within a week (not monday)
-        ['%a %d', function (d) {
-            //return d.getDay() ==1;
-            return d.getDay() && d.getDate() != 1;
-        }],
-        // within a month
-        ['%b %d', function (d) {
-            return d.getDate() != 1;
-        }],
-        // Month
-        ['%B', function (d) {
-            return d.getMonth();
-        }]];
+        var pre = [
+            ['.%L', function (d) {
+                return d.getMilliseconds();
+            }],
+            [':%S', function (d) {
+                return d.getSeconds();
+            }],
+            // Within a hour
+            ['h1 %I:%M', function (d) {
+                return d.getMinutes();
+            }]];
+        var post = [
+            ['%Y', function () {
+                return true;
+            }]];
+        
+        var mid = [                    
+            // Within a day
+            ['%I:%M', function (d) {
+                return d.getHours();
+            }],
+            // Day within a week (not monday)
+            ['%a %d', function (d) {
+                //return d.getDay() ==1;
+                return d.getDay() && d.getDate() != 1;
+            }],
+            // within a month
+            ['%b %d', function (d) {
+                return d.getDate() != 1;
+            }],
+            // Month
+            ['%B', function (d) {
+                return d.getMonth();
+            }]
+        ];
         var formatter;
-        if (typeof conf.axisFormatter !== 'undefined') {
+        if(typeof conf.axisFormatter !== 'undefined'){
             mid = [];
-            conf.axisFormatter.forEach(function (item) {
+            conf.axisFormatter.forEach(function(item){
                 var n = [];
                 n[0] = item[0];
                 n[1] = item[1];
@@ -36651,13 +36996,27 @@ module.exports.draw = function (text, id) {
         }
         formatter = pre.concat(mid).concat(post);
 
-        var xAxis = d3.svg.axis().scale(timeScale).orient('bottom').tickSize(-h + theTopPad + conf.gridLineStartPadding, 0, 0).tickFormat(d3.time.format.multi(formatter));
+        var xAxis = d3.svg.axis()
+                .scale(timeScale)
+                .orient('bottom')
+                .tickSize(-h + theTopPad + conf.gridLineStartPadding, 0, 0)
+                .tickFormat(d3.time.format.multi(formatter))
+            ;
 
-        if (daysInChart > 7 && daysInChart < 230) {
+        if(daysInChart >7 && daysInChart<230){
             xAxis = xAxis.ticks(d3.time.monday.range);
         }
 
-        svg.append('g').attr('class', 'grid').attr('transform', 'translate(' + theSidePad + ', ' + (h - 50) + ')').call(xAxis).selectAll('text').style('text-anchor', 'middle').attr('fill', '#000').attr('stroke', 'none').attr('font-size', 10).attr('dy', '1em');
+        svg.append('g')
+            .attr('class', 'grid')
+            .attr('transform', 'translate(' + theSidePad + ', ' + (h - 50) + ')')
+            .call(xAxis)
+            .selectAll('text')
+            .style('text-anchor', 'middle')
+            .attr('fill', '#000')
+            .attr('stroke', 'none')
+            .attr('font-size', 10)
+            .attr('dy', '1em');
     }
 
     function vertLabels(theGap, theTopPad) {
@@ -36669,43 +37028,56 @@ module.exports.draw = function (text, id) {
         }
 
         svg.append('g') //without doing this, impossible to put grid lines behind text
-        .selectAll('text').data(numOccurances).enter().append('text').text(function (d) {
-            return d[0];
-        }).attr('x', 10).attr('y', function (d, i) {
-            if (i > 0) {
-                for (var j = 0; j < i; j++) {
-                    prevGap += numOccurances[i - 1][1];
-                    // log.debug(prevGap);
-                    return d[1] * theGap / 2 + prevGap * theGap + theTopPad;
+            .selectAll('text')
+            .data(numOccurances)
+            .enter()
+            .append('text')
+            .text(function (d) {
+                return d[0];
+            })
+            .attr('x', 10)
+            .attr('y', function (d, i) {
+                if (i > 0) {
+                    for (var j = 0; j < i; j++) {
+                        prevGap += numOccurances[i - 1][1];
+                        // log.debug(prevGap);
+                        return d[1] * theGap / 2 + prevGap * theGap + theTopPad;
+                    }
+                } else {
+                    return d[1] * theGap / 2 + theTopPad;
                 }
-            } else {
-                return d[1] * theGap / 2 + theTopPad;
-            }
-        }).attr('class', function (d) {
-            for (var i = 0; i < categories.length; i++) {
-                if (d[0] === categories[i]) {
-                    return 'sectionTitle sectionTitle' + i % conf.numberSectionStyles;
+            })
+            .attr('class', function (d) {
+                for (var i = 0; i < categories.length; i++) {
+                    if (d[0] === categories[i]) {
+                        return 'sectionTitle sectionTitle' + (i % conf.numberSectionStyles);
+                    }
                 }
-            }
-            return 'sectionTitle';
-        });
+                return 'sectionTitle';
+            });
+
     }
 
     function drawToday(theSidePad, theTopPad, w, h) {
-        var todayG = svg.append('g').attr('class', 'today');
+        var todayG = svg.append('g')
+            .attr('class', 'today');
 
         var today = new Date();
 
-        todayG.append('line').attr('x1', timeScale(today) + theSidePad).attr('x2', timeScale(today) + theSidePad).attr('y1', conf.titleTopMargin).attr('y2', h - conf.titleTopMargin).attr('class', 'today');
+        todayG.append('line')
+                .attr('x1', timeScale(today) + theSidePad)
+                .attr('x2', timeScale(today) + theSidePad)
+                .attr('y1', conf.titleTopMargin)
+                .attr('y2', h-conf.titleTopMargin)
+                .attr('class', 'today')
+            ;
     }
 
-    //from this stackexchange question: http://stackoverflow.com/questions/1890203/unique-for-arrays-in-javascript
+//from this stackexchange question: http://stackoverflow.com/questions/1890203/unique-for-arrays-in-javascript
     function checkUnique(arr) {
-        var hash = {},
-            result = [];
+        var hash = {}, result = [];
         for (var i = 0, l = arr.length; i < l; ++i) {
-            if (!hash.hasOwnProperty(arr[i])) {
-                //it works with objects! in FF, at least
+            if (!hash.hasOwnProperty(arr[i])) { //it works with objects! in FF, at least
                 hash[arr[i]] = true;
                 result.push(arr[i]);
             }
@@ -36713,26 +37085,24 @@ module.exports.draw = function (text, id) {
         return result;
     }
 
-    //from this stackexchange question: http://stackoverflow.com/questions/14227981/count-how-many-strings-in-an-array-have-duplicates-in-the-same-array
+//from this stackexchange question: http://stackoverflow.com/questions/14227981/count-how-many-strings-in-an-array-have-duplicates-in-the-same-array
     function getCounts(arr) {
-        var i = arr.length,
-            // var to loop over
-        obj = {}; // obj to store results
+        var i = arr.length, // var to loop over
+            obj = {}; // obj to store results
         while (i) {
             obj[arr[--i]] = (obj[arr[i]] || 0) + 1; // count occurrences
         }
         return obj;
     }
 
-    // get specific from everything
+// get specific from everything
     function getCount(word, arr) {
         return getCounts(arr)[word] || 0;
     }
 };
-
 },{"../../d3":107,"./ganttDb":119,"./parser/gantt":121,"moment":105}],121:[function(require,module,exports){
 (function (process){
-/* parser generated by jison 0.4.15 */
+/* parser generated by jison 0.4.16 */
 /*
   Returns a Parser object of the following structure:
 
@@ -36805,617 +37175,593 @@ module.exports.draw = function (text, id) {
     recoverable: (boolean: TRUE when the parser has a error recovery rule available for this particular error)
   }
 */
-"use strict";
+var parser = (function(){
+var o=function(k,v,o,l){for(o=o||{},l=k.length;l--;o[k[l]]=v);return o},$V0=[6,8,10,11,12,13,14],$V1=[1,9],$V2=[1,10],$V3=[1,11],$V4=[1,12];
+var parser = {trace: function trace() { },
+yy: {},
+symbols_: {"error":2,"start":3,"gantt":4,"document":5,"EOF":6,"line":7,"SPACE":8,"statement":9,"NL":10,"dateFormat":11,"title":12,"section":13,"taskTxt":14,"taskData":15,"$accept":0,"$end":1},
+terminals_: {2:"error",4:"gantt",6:"EOF",8:"SPACE",10:"NL",11:"dateFormat",12:"title",13:"section",14:"taskTxt",15:"taskData"},
+productions_: [0,[3,3],[5,0],[5,2],[7,2],[7,1],[7,1],[7,1],[9,1],[9,1],[9,1],[9,2]],
+performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
+/* this == yyval */
 
-var gantt = (function () {
-    var o = function o(k, v, _o, l) {
-        for (_o = _o || {}, l = k.length; l--; _o[k[l]] = v);return _o;
-    },
-        $V0 = [6, 8, 10, 11, 12, 13, 14],
-        $V1 = [1, 9],
-        $V2 = [1, 10],
-        $V3 = [1, 11],
-        $V4 = [1, 12];
-    var parser = { trace: function trace() {},
-        yy: {},
-        symbols_: { "error": 2, "start": 3, "gantt": 4, "document": 5, "EOF": 6, "line": 7, "SPACE": 8, "statement": 9, "NL": 10, "dateFormat": 11, "title": 12, "section": 13, "taskTxt": 14, "taskData": 15, "$accept": 0, "$end": 1 },
-        terminals_: { 2: "error", 4: "gantt", 6: "EOF", 8: "SPACE", 10: "NL", 11: "dateFormat", 12: "title", 13: "section", 14: "taskTxt", 15: "taskData" },
-        productions_: [0, [3, 3], [5, 0], [5, 2], [7, 2], [7, 1], [7, 1], [7, 1], [9, 1], [9, 1], [9, 1], [9, 2]],
-        performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, /* action[1] */$$, /* vstack */_$ /* lstack */) {
-            /* this == yyval */
+var $0 = $$.length - 1;
+switch (yystate) {
+case 1:
+ return $$[$0-1]; 
+break;
+case 2:
+ this.$ = [] 
+break;
+case 3:
+$$[$0-1].push($$[$0]);this.$ = $$[$0-1]
+break;
+case 4: case 5:
+ this.$ = $$[$0] 
+break;
+case 6: case 7:
+ this.$=[];
+break;
+case 8:
+yy.setDateFormat($$[$0].substr(11));this.$=$$[$0].substr(11);
+break;
+case 9:
+yy.setTitle($$[$0].substr(6));this.$=$$[$0].substr(6);
+break;
+case 10:
+yy.addSection($$[$0].substr(8));this.$=$$[$0].substr(8);
+break;
+case 11:
+yy.addTask($$[$0-1],$$[$0]);this.$='task';
+break;
+}
+},
+table: [{3:1,4:[1,2]},{1:[3]},o($V0,[2,2],{5:3}),{6:[1,4],7:5,8:[1,6],9:7,10:[1,8],11:$V1,12:$V2,13:$V3,14:$V4},o($V0,[2,7],{1:[2,1]}),o($V0,[2,3]),{9:13,11:$V1,12:$V2,13:$V3,14:$V4},o($V0,[2,5]),o($V0,[2,6]),o($V0,[2,8]),o($V0,[2,9]),o($V0,[2,10]),{15:[1,14]},o($V0,[2,4]),o($V0,[2,11])],
+defaultActions: {},
+parseError: function parseError(str, hash) {
+    if (hash.recoverable) {
+        this.trace(str);
+    } else {
+        function _parseError (msg, hash) {
+            this.message = msg;
+            this.hash = hash;
+        }
+        _parseError.prototype = new Error();
 
-            var $0 = $$.length - 1;
-            switch (yystate) {
-                case 1:
-                    return $$[$0 - 1];
-                    break;
-                case 2:
-                    this.$ = [];
-                    break;
-                case 3:
-                    $$[$0 - 1].push($$[$0]);this.$ = $$[$0 - 1];
-                    break;
-                case 4:case 5:
-                    this.$ = $$[$0];
-                    break;
-                case 6:case 7:
-                    this.$ = [];
-                    break;
-                case 8:
-                    yy.setDateFormat($$[$0].substr(11));this.$ = $$[$0].substr(11);
-                    break;
-                case 9:
-                    yy.setTitle($$[$0].substr(6));this.$ = $$[$0].substr(6);
-                    break;
-                case 10:
-                    yy.addSection($$[$0].substr(8));this.$ = $$[$0].substr(8);
-                    break;
-                case 11:
-                    yy.addTask($$[$0 - 1], $$[$0]);this.$ = 'task';
-                    break;
+        throw new _parseError(str, hash);
+    }
+},
+parse: function parse(input) {
+    var self = this, stack = [0], tstack = [], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, recovering = 0, TERROR = 2, EOF = 1;
+    var args = lstack.slice.call(arguments, 1);
+    var lexer = Object.create(this.lexer);
+    var sharedState = { yy: {} };
+    for (var k in this.yy) {
+        if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
+            sharedState.yy[k] = this.yy[k];
+        }
+    }
+    lexer.setInput(input, sharedState.yy);
+    sharedState.yy.lexer = lexer;
+    sharedState.yy.parser = this;
+    if (typeof lexer.yylloc == 'undefined') {
+        lexer.yylloc = {};
+    }
+    var yyloc = lexer.yylloc;
+    lstack.push(yyloc);
+    var ranges = lexer.options && lexer.options.ranges;
+    if (typeof sharedState.yy.parseError === 'function') {
+        this.parseError = sharedState.yy.parseError;
+    } else {
+        this.parseError = Object.getPrototypeOf(this).parseError;
+    }
+    function popStack(n) {
+        stack.length = stack.length - 2 * n;
+        vstack.length = vstack.length - n;
+        lstack.length = lstack.length - n;
+    }
+    _token_stack:
+        var lex = function () {
+            var token;
+            token = lexer.lex() || EOF;
+            if (typeof token !== 'number') {
+                token = self.symbols_[token] || token;
             }
-        },
-        table: [{ 3: 1, 4: [1, 2] }, { 1: [3] }, o($V0, [2, 2], { 5: 3 }), { 6: [1, 4], 7: 5, 8: [1, 6], 9: 7, 10: [1, 8], 11: $V1, 12: $V2, 13: $V3, 14: $V4 }, o($V0, [2, 7], { 1: [2, 1] }), o($V0, [2, 3]), { 9: 13, 11: $V1, 12: $V2, 13: $V3, 14: $V4 }, o($V0, [2, 5]), o($V0, [2, 6]), o($V0, [2, 8]), o($V0, [2, 9]), o($V0, [2, 10]), { 15: [1, 14] }, o($V0, [2, 4]), o($V0, [2, 11])],
-        defaultActions: {},
-        parseError: function parseError(str, hash) {
-            if (hash.recoverable) {
-                this.trace(str);
-            } else {
-                var _parseError = function _parseError(msg, hash) {
-                    this.message = msg;
-                    this.hash = hash;
-                };
-
-                _parseError.prototype = new Error();
-
-                throw new _parseError(str, hash);
+            return token;
+        };
+    var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
+    while (true) {
+        state = stack[stack.length - 1];
+        if (this.defaultActions[state]) {
+            action = this.defaultActions[state];
+        } else {
+            if (symbol === null || typeof symbol == 'undefined') {
+                symbol = lex();
             }
-        },
-        parse: function parse(input) {
-            var self = this,
-                stack = [0],
-                tstack = [],
-                vstack = [null],
-                lstack = [],
-                table = this.table,
-                yytext = '',
-                yylineno = 0,
-                yyleng = 0,
-                recovering = 0,
-                TERROR = 2,
-                EOF = 1;
-            var args = lstack.slice.call(arguments, 1);
-            var lexer = Object.create(this.lexer);
-            var sharedState = { yy: {} };
-            for (var k in this.yy) {
-                if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
-                    sharedState.yy[k] = this.yy[k];
+            action = table[state] && table[state][symbol];
+        }
+                    if (typeof action === 'undefined' || !action.length || !action[0]) {
+                var errStr = '';
+                expected = [];
+                for (p in table[state]) {
+                    if (this.terminals_[p] && p > TERROR) {
+                        expected.push('\'' + this.terminals_[p] + '\'');
+                    }
                 }
-            }
-            lexer.setInput(input, sharedState.yy);
-            sharedState.yy.lexer = lexer;
-            sharedState.yy.parser = this;
-            if (typeof lexer.yylloc == 'undefined') {
-                lexer.yylloc = {};
-            }
-            var yyloc = lexer.yylloc;
-            lstack.push(yyloc);
-            var ranges = lexer.options && lexer.options.ranges;
-            if (typeof sharedState.yy.parseError === 'function') {
-                this.parseError = sharedState.yy.parseError;
-            } else {
-                this.parseError = Object.getPrototypeOf(this).parseError;
-            }
-            function popStack(n) {
-                stack.length = stack.length - 2 * n;
-                vstack.length = vstack.length - n;
-                lstack.length = lstack.length - n;
-            }
-            _token_stack: var lex = function lex() {
-                var token;
-                token = lexer.lex() || EOF;
-                if (typeof token !== 'number') {
-                    token = self.symbols_[token] || token;
+                if (lexer.showPosition) {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
+                } else {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
                 }
-                return token;
+                this.parseError(errStr, {
+                    text: lexer.match,
+                    token: this.terminals_[symbol] || symbol,
+                    line: lexer.yylineno,
+                    loc: yyloc,
+                    expected: expected
+                });
+            }
+        if (action[0] instanceof Array && action.length > 1) {
+            throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
+        }
+        switch (action[0]) {
+        case 1:
+            stack.push(symbol);
+            vstack.push(lexer.yytext);
+            lstack.push(lexer.yylloc);
+            stack.push(action[1]);
+            symbol = null;
+            if (!preErrorSymbol) {
+                yyleng = lexer.yyleng;
+                yytext = lexer.yytext;
+                yylineno = lexer.yylineno;
+                yyloc = lexer.yylloc;
+                if (recovering > 0) {
+                    recovering--;
+                }
+            } else {
+                symbol = preErrorSymbol;
+                preErrorSymbol = null;
+            }
+            break;
+        case 2:
+            len = this.productions_[action[1]][1];
+            yyval.$ = vstack[vstack.length - len];
+            yyval._$ = {
+                first_line: lstack[lstack.length - (len || 1)].first_line,
+                last_line: lstack[lstack.length - 1].last_line,
+                first_column: lstack[lstack.length - (len || 1)].first_column,
+                last_column: lstack[lstack.length - 1].last_column
             };
-            var symbol,
-                preErrorSymbol,
-                state,
-                action,
-                a,
-                r,
-                yyval = {},
-                p,
-                len,
-                newState,
-                expected;
-            while (true) {
-                state = stack[stack.length - 1];
-                if (this.defaultActions[state]) {
-                    action = this.defaultActions[state];
-                } else {
-                    if (symbol === null || typeof symbol == 'undefined') {
-                        symbol = lex();
-                    }
-                    action = table[state] && table[state][symbol];
-                }
-                if (typeof action === 'undefined' || !action.length || !action[0]) {
-                    var errStr = '';
-                    expected = [];
-                    for (p in table[state]) {
-                        if (this.terminals_[p] && p > TERROR) {
-                            expected.push('\'' + this.terminals_[p] + '\'');
-                        }
-                    }
-                    if (lexer.showPosition) {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
-                    } else {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
-                    }
-                    this.parseError(errStr, {
-                        text: lexer.match,
-                        token: this.terminals_[symbol] || symbol,
-                        line: lexer.yylineno,
-                        loc: yyloc,
-                        expected: expected
-                    });
-                }
-                if (action[0] instanceof Array && action.length > 1) {
-                    throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
-                }
-                switch (action[0]) {
-                    case 1:
-                        stack.push(symbol);
-                        vstack.push(lexer.yytext);
-                        lstack.push(lexer.yylloc);
-                        stack.push(action[1]);
-                        symbol = null;
-                        if (!preErrorSymbol) {
-                            yyleng = lexer.yyleng;
-                            yytext = lexer.yytext;
-                            yylineno = lexer.yylineno;
-                            yyloc = lexer.yylloc;
-                            if (recovering > 0) {
-                                recovering--;
-                            }
-                        } else {
-                            symbol = preErrorSymbol;
-                            preErrorSymbol = null;
-                        }
-                        break;
-                    case 2:
-                        len = this.productions_[action[1]][1];
-                        yyval.$ = vstack[vstack.length - len];
-                        yyval._$ = {
-                            first_line: lstack[lstack.length - (len || 1)].first_line,
-                            last_line: lstack[lstack.length - 1].last_line,
-                            first_column: lstack[lstack.length - (len || 1)].first_column,
-                            last_column: lstack[lstack.length - 1].last_column
-                        };
-                        if (ranges) {
-                            yyval._$.range = [lstack[lstack.length - (len || 1)].range[0], lstack[lstack.length - 1].range[1]];
-                        }
-                        r = this.performAction.apply(yyval, [yytext, yyleng, yylineno, sharedState.yy, action[1], vstack, lstack].concat(args));
-                        if (typeof r !== 'undefined') {
-                            return r;
-                        }
-                        if (len) {
-                            stack = stack.slice(0, -1 * len * 2);
-                            vstack = vstack.slice(0, -1 * len);
-                            lstack = lstack.slice(0, -1 * len);
-                        }
-                        stack.push(this.productions_[action[1]][0]);
-                        vstack.push(yyval.$);
-                        lstack.push(yyval._$);
-                        newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
-                        stack.push(newState);
-                        break;
-                    case 3:
-                        return true;
-                }
+            if (ranges) {
+                yyval._$.range = [
+                    lstack[lstack.length - (len || 1)].range[0],
+                    lstack[lstack.length - 1].range[1]
+                ];
             }
+            r = this.performAction.apply(yyval, [
+                yytext,
+                yyleng,
+                yylineno,
+                sharedState.yy,
+                action[1],
+                vstack,
+                lstack
+            ].concat(args));
+            if (typeof r !== 'undefined') {
+                return r;
+            }
+            if (len) {
+                stack = stack.slice(0, -1 * len * 2);
+                vstack = vstack.slice(0, -1 * len);
+                lstack = lstack.slice(0, -1 * len);
+            }
+            stack.push(this.productions_[action[1]][0]);
+            vstack.push(yyval.$);
+            lstack.push(yyval._$);
+            newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
+            stack.push(newState);
+            break;
+        case 3:
             return true;
-        } };
-    /* generated by jison-lex 0.3.4 */
-    var lexer = (function () {
-        var lexer = {
+        }
+    }
+    return true;
+}};
+/* generated by jison-lex 0.3.4 */
+var lexer = (function(){
+var lexer = ({
 
-            EOF: 1,
+EOF:1,
 
-            parseError: function parseError(str, hash) {
-                if (this.yy.parser) {
-                    this.yy.parser.parseError(str, hash);
-                } else {
-                    throw new Error(str);
-                }
-            },
+parseError:function parseError(str, hash) {
+        if (this.yy.parser) {
+            this.yy.parser.parseError(str, hash);
+        } else {
+            throw new Error(str);
+        }
+    },
 
-            // resets the lexer, sets new input
-            setInput: function setInput(input, yy) {
-                this.yy = yy || this.yy || {};
-                this._input = input;
-                this._more = this._backtrack = this.done = false;
-                this.yylineno = this.yyleng = 0;
-                this.yytext = this.matched = this.match = '';
-                this.conditionStack = ['INITIAL'];
-                this.yylloc = {
-                    first_line: 1,
-                    first_column: 0,
-                    last_line: 1,
-                    last_column: 0
-                };
-                if (this.options.ranges) {
-                    this.yylloc.range = [0, 0];
-                }
-                this.offset = 0;
-                return this;
-            },
+// resets the lexer, sets new input
+setInput:function (input, yy) {
+        this.yy = yy || this.yy || {};
+        this._input = input;
+        this._more = this._backtrack = this.done = false;
+        this.yylineno = this.yyleng = 0;
+        this.yytext = this.matched = this.match = '';
+        this.conditionStack = ['INITIAL'];
+        this.yylloc = {
+            first_line: 1,
+            first_column: 0,
+            last_line: 1,
+            last_column: 0
+        };
+        if (this.options.ranges) {
+            this.yylloc.range = [0,0];
+        }
+        this.offset = 0;
+        return this;
+    },
 
-            // consumes and returns one char from the input
-            input: function input() {
-                var ch = this._input[0];
-                this.yytext += ch;
-                this.yyleng++;
-                this.offset++;
-                this.match += ch;
-                this.matched += ch;
-                var lines = ch.match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno++;
-                    this.yylloc.last_line++;
-                } else {
-                    this.yylloc.last_column++;
-                }
-                if (this.options.ranges) {
-                    this.yylloc.range[1]++;
-                }
+// consumes and returns one char from the input
+input:function () {
+        var ch = this._input[0];
+        this.yytext += ch;
+        this.yyleng++;
+        this.offset++;
+        this.match += ch;
+        this.matched += ch;
+        var lines = ch.match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno++;
+            this.yylloc.last_line++;
+        } else {
+            this.yylloc.last_column++;
+        }
+        if (this.options.ranges) {
+            this.yylloc.range[1]++;
+        }
 
-                this._input = this._input.slice(1);
-                return ch;
-            },
+        this._input = this._input.slice(1);
+        return ch;
+    },
 
-            // unshifts one char (or a string) into the input
-            unput: function unput(ch) {
-                var len = ch.length;
-                var lines = ch.split(/(?:\r\n?|\n)/g);
+// unshifts one char (or a string) into the input
+unput:function (ch) {
+        var len = ch.length;
+        var lines = ch.split(/(?:\r\n?|\n)/g);
 
-                this._input = ch + this._input;
-                this.yytext = this.yytext.substr(0, this.yytext.length - len);
-                //this.yyleng -= len;
-                this.offset -= len;
-                var oldLines = this.match.split(/(?:\r\n?|\n)/g);
-                this.match = this.match.substr(0, this.match.length - 1);
-                this.matched = this.matched.substr(0, this.matched.length - 1);
+        this._input = ch + this._input;
+        this.yytext = this.yytext.substr(0, this.yytext.length - len);
+        //this.yyleng -= len;
+        this.offset -= len;
+        var oldLines = this.match.split(/(?:\r\n?|\n)/g);
+        this.match = this.match.substr(0, this.match.length - 1);
+        this.matched = this.matched.substr(0, this.matched.length - 1);
 
-                if (lines.length - 1) {
-                    this.yylineno -= lines.length - 1;
-                }
-                var r = this.yylloc.range;
+        if (lines.length - 1) {
+            this.yylineno -= lines.length - 1;
+        }
+        var r = this.yylloc.range;
 
-                this.yylloc = {
+        this.yylloc = {
+            first_line: this.yylloc.first_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.first_column,
+            last_column: lines ?
+                (lines.length === oldLines.length ? this.yylloc.first_column : 0)
+                 + oldLines[oldLines.length - lines.length].length - lines[0].length :
+              this.yylloc.first_column - len
+        };
+
+        if (this.options.ranges) {
+            this.yylloc.range = [r[0], r[0] + this.yyleng - len];
+        }
+        this.yyleng = this.yytext.length;
+        return this;
+    },
+
+// When called from action, caches matched text and appends it on next action
+more:function () {
+        this._more = true;
+        return this;
+    },
+
+// When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
+reject:function () {
+        if (this.options.backtrack_lexer) {
+            this._backtrack = true;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+
+        }
+        return this;
+    },
+
+// retain first n characters of the match
+less:function (n) {
+        this.unput(this.match.slice(n));
+    },
+
+// displays already matched input, i.e. for error messages
+pastInput:function () {
+        var past = this.matched.substr(0, this.matched.length - this.match.length);
+        return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
+    },
+
+// displays upcoming input, i.e. for error messages
+upcomingInput:function () {
+        var next = this.match;
+        if (next.length < 20) {
+            next += this._input.substr(0, 20-next.length);
+        }
+        return (next.substr(0,20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
+    },
+
+// displays the character position where the lexing error occurred, i.e. for error messages
+showPosition:function () {
+        var pre = this.pastInput();
+        var c = new Array(pre.length + 1).join("-");
+        return pre + this.upcomingInput() + "\n" + c + "^";
+    },
+
+// test the lexed token: return FALSE when not a match, otherwise return token
+test_match:function (match, indexed_rule) {
+        var token,
+            lines,
+            backup;
+
+        if (this.options.backtrack_lexer) {
+            // save context
+            backup = {
+                yylineno: this.yylineno,
+                yylloc: {
                     first_line: this.yylloc.first_line,
-                    last_line: this.yylineno + 1,
+                    last_line: this.last_line,
                     first_column: this.yylloc.first_column,
-                    last_column: lines ? (lines.length === oldLines.length ? this.yylloc.first_column : 0) + oldLines[oldLines.length - lines.length].length - lines[0].length : this.yylloc.first_column - len
-                };
+                    last_column: this.yylloc.last_column
+                },
+                yytext: this.yytext,
+                match: this.match,
+                matches: this.matches,
+                matched: this.matched,
+                yyleng: this.yyleng,
+                offset: this.offset,
+                _more: this._more,
+                _input: this._input,
+                yy: this.yy,
+                conditionStack: this.conditionStack.slice(0),
+                done: this.done
+            };
+            if (this.options.ranges) {
+                backup.yylloc.range = this.yylloc.range.slice(0);
+            }
+        }
 
-                if (this.options.ranges) {
-                    this.yylloc.range = [r[0], r[0] + this.yyleng - len];
-                }
-                this.yyleng = this.yytext.length;
-                return this;
-            },
+        lines = match[0].match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno += lines.length;
+        }
+        this.yylloc = {
+            first_line: this.yylloc.last_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.last_column,
+            last_column: lines ?
+                         lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length :
+                         this.yylloc.last_column + match[0].length
+        };
+        this.yytext += match[0];
+        this.match += match[0];
+        this.matches = match;
+        this.yyleng = this.yytext.length;
+        if (this.options.ranges) {
+            this.yylloc.range = [this.offset, this.offset += this.yyleng];
+        }
+        this._more = false;
+        this._backtrack = false;
+        this._input = this._input.slice(match[0].length);
+        this.matched += match[0];
+        token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
+        if (this.done && this._input) {
+            this.done = false;
+        }
+        if (token) {
+            return token;
+        } else if (this._backtrack) {
+            // recover context
+            for (var k in backup) {
+                this[k] = backup[k];
+            }
+            return false; // rule action called reject() implying the next rule should be tested instead.
+        }
+        return false;
+    },
 
-            // When called from action, caches matched text and appends it on next action
-            more: function more() {
-                this._more = true;
-                return this;
-            },
+// return next match in input
+next:function () {
+        if (this.done) {
+            return this.EOF;
+        }
+        if (!this._input) {
+            this.done = true;
+        }
 
-            // When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
-            reject: function reject() {
+        var token,
+            match,
+            tempMatch,
+            index;
+        if (!this._more) {
+            this.yytext = '';
+            this.match = '';
+        }
+        var rules = this._currentRules();
+        for (var i = 0; i < rules.length; i++) {
+            tempMatch = this._input.match(this.rules[rules[i]]);
+            if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
+                match = tempMatch;
+                index = i;
                 if (this.options.backtrack_lexer) {
-                    this._backtrack = true;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-                return this;
-            },
-
-            // retain first n characters of the match
-            less: function less(n) {
-                this.unput(this.match.slice(n));
-            },
-
-            // displays already matched input, i.e. for error messages
-            pastInput: function pastInput() {
-                var past = this.matched.substr(0, this.matched.length - this.match.length);
-                return (past.length > 20 ? '...' : '') + past.substr(-20).replace(/\n/g, "");
-            },
-
-            // displays upcoming input, i.e. for error messages
-            upcomingInput: function upcomingInput() {
-                var next = this.match;
-                if (next.length < 20) {
-                    next += this._input.substr(0, 20 - next.length);
-                }
-                return (next.substr(0, 20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
-            },
-
-            // displays the character position where the lexing error occurred, i.e. for error messages
-            showPosition: function showPosition() {
-                var pre = this.pastInput();
-                var c = new Array(pre.length + 1).join("-");
-                return pre + this.upcomingInput() + "\n" + c + "^";
-            },
-
-            // test the lexed token: return FALSE when not a match, otherwise return token
-            test_match: function test_match(match, indexed_rule) {
-                var token, lines, backup;
-
-                if (this.options.backtrack_lexer) {
-                    // save context
-                    backup = {
-                        yylineno: this.yylineno,
-                        yylloc: {
-                            first_line: this.yylloc.first_line,
-                            last_line: this.last_line,
-                            first_column: this.yylloc.first_column,
-                            last_column: this.yylloc.last_column
-                        },
-                        yytext: this.yytext,
-                        match: this.match,
-                        matches: this.matches,
-                        matched: this.matched,
-                        yyleng: this.yyleng,
-                        offset: this.offset,
-                        _more: this._more,
-                        _input: this._input,
-                        yy: this.yy,
-                        conditionStack: this.conditionStack.slice(0),
-                        done: this.done
-                    };
-                    if (this.options.ranges) {
-                        backup.yylloc.range = this.yylloc.range.slice(0);
-                    }
-                }
-
-                lines = match[0].match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno += lines.length;
-                }
-                this.yylloc = {
-                    first_line: this.yylloc.last_line,
-                    last_line: this.yylineno + 1,
-                    first_column: this.yylloc.last_column,
-                    last_column: lines ? lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length : this.yylloc.last_column + match[0].length
-                };
-                this.yytext += match[0];
-                this.match += match[0];
-                this.matches = match;
-                this.yyleng = this.yytext.length;
-                if (this.options.ranges) {
-                    this.yylloc.range = [this.offset, this.offset += this.yyleng];
-                }
-                this._more = false;
-                this._backtrack = false;
-                this._input = this._input.slice(match[0].length);
-                this.matched += match[0];
-                token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
-                if (this.done && this._input) {
-                    this.done = false;
-                }
-                if (token) {
-                    return token;
-                } else if (this._backtrack) {
-                    // recover context
-                    for (var k in backup) {
-                        this[k] = backup[k];
-                    }
-                    return false; // rule action called reject() implying the next rule should be tested instead.
-                }
-                return false;
-            },
-
-            // return next match in input
-            next: function next() {
-                if (this.done) {
-                    return this.EOF;
-                }
-                if (!this._input) {
-                    this.done = true;
-                }
-
-                var token, match, tempMatch, index;
-                if (!this._more) {
-                    this.yytext = '';
-                    this.match = '';
-                }
-                var rules = this._currentRules();
-                for (var i = 0; i < rules.length; i++) {
-                    tempMatch = this._input.match(this.rules[rules[i]]);
-                    if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
-                        match = tempMatch;
-                        index = i;
-                        if (this.options.backtrack_lexer) {
-                            token = this.test_match(tempMatch, rules[i]);
-                            if (token !== false) {
-                                return token;
-                            } else if (this._backtrack) {
-                                match = false;
-                                continue; // rule action called reject() implying a rule MISmatch.
-                            } else {
-                                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                                    return false;
-                                }
-                        } else if (!this.options.flex) {
-                            break;
-                        }
-                    }
-                }
-                if (match) {
-                    token = this.test_match(match, rules[index]);
+                    token = this.test_match(tempMatch, rules[i]);
                     if (token !== false) {
                         return token;
+                    } else if (this._backtrack) {
+                        match = false;
+                        continue; // rule action called reject() implying a rule MISmatch.
+                    } else {
+                        // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+                        return false;
                     }
-                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                    return false;
+                } else if (!this.options.flex) {
+                    break;
                 }
-                if (this._input === "") {
-                    return this.EOF;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-            },
+            }
+        }
+        if (match) {
+            token = this.test_match(match, rules[index]);
+            if (token !== false) {
+                return token;
+            }
+            // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+            return false;
+        }
+        if (this._input === "") {
+            return this.EOF;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+        }
+    },
 
-            // return next match that has a token
-            lex: function lex() {
-                var r = this.next();
-                if (r) {
-                    return r;
-                } else {
-                    return this.lex();
-                }
-            },
+// return next match that has a token
+lex:function lex() {
+        var r = this.next();
+        if (r) {
+            return r;
+        } else {
+            return this.lex();
+        }
+    },
 
-            // activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
-            begin: function begin(condition) {
-                this.conditionStack.push(condition);
-            },
+// activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
+begin:function begin(condition) {
+        this.conditionStack.push(condition);
+    },
 
-            // pop the previously active lexer condition state off the condition stack
-            popState: function popState() {
-                var n = this.conditionStack.length - 1;
-                if (n > 0) {
-                    return this.conditionStack.pop();
-                } else {
-                    return this.conditionStack[0];
-                }
-            },
+// pop the previously active lexer condition state off the condition stack
+popState:function popState() {
+        var n = this.conditionStack.length - 1;
+        if (n > 0) {
+            return this.conditionStack.pop();
+        } else {
+            return this.conditionStack[0];
+        }
+    },
 
-            // produce the lexer rule set which is active for the currently active lexer condition state
-            _currentRules: function _currentRules() {
-                if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
-                    return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
-                } else {
-                    return this.conditions["INITIAL"].rules;
-                }
-            },
+// produce the lexer rule set which is active for the currently active lexer condition state
+_currentRules:function _currentRules() {
+        if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
+            return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
+        } else {
+            return this.conditions["INITIAL"].rules;
+        }
+    },
 
-            // return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
-            topState: function topState(n) {
-                n = this.conditionStack.length - 1 - Math.abs(n || 0);
-                if (n >= 0) {
-                    return this.conditionStack[n];
-                } else {
-                    return "INITIAL";
-                }
-            },
+// return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
+topState:function topState(n) {
+        n = this.conditionStack.length - 1 - Math.abs(n || 0);
+        if (n >= 0) {
+            return this.conditionStack[n];
+        } else {
+            return "INITIAL";
+        }
+    },
 
-            // alias for begin(condition)
-            pushState: function pushState(condition) {
-                this.begin(condition);
-            },
+// alias for begin(condition)
+pushState:function pushState(condition) {
+        this.begin(condition);
+    },
 
-            // return the number of states currently on the stack
-            stateStackSize: function stateStackSize() {
-                return this.conditionStack.length;
-            },
-            options: { "case-insensitive": true },
-            performAction: function anonymous(yy, yy_, $avoiding_name_collisions, YY_START) {
-                // Pre-lexer code can go here
+// return the number of states currently on the stack
+stateStackSize:function stateStackSize() {
+        return this.conditionStack.length;
+    },
+options: {"case-insensitive":true},
+performAction: function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
+	// Pre-lexer code can go here
 
-                var YYSTATE = YY_START;
-                switch ($avoiding_name_collisions) {
-                    case 0:
-                        return 10;
-                        break;
-                    case 1:
-                        /* skip whitespace */
-                        break;
-                    case 2:
-                        /* skip comments */
-                        break;
-                    case 3:
-                        /* skip comments */
-                        break;
-                    case 4:
-                        return 4;
-                        break;
-                    case 5:
-                        return 11;
-                        break;
-                    case 6:
-                        return 'date';
-                        break;
-                    case 7:
-                        return 12;
-                        break;
-                    case 8:
-                        return 13;
-                        break;
-                    case 9:
-                        return 14;
-                        break;
-                    case 10:
-                        return 15;
-                        break;
-                    case 11:
-                        return ':';
-                        break;
-                    case 12:
-                        return 6;
-                        break;
-                    case 13:
-                        return 'INVALID';
-                        break;
-                }
-            },
-            rules: [/^(?:[\n]+)/i, /^(?:\s+)/i, /^(?:#[^\n]*)/i, /^(?:%[^\n]*)/i, /^(?:gantt\b)/i, /^(?:dateFormat\s[^#\n;]+)/i, /^(?:\d\d\d\d-\d\d-\d\d\b)/i, /^(?:title\s[^#\n;]+)/i, /^(?:section\s[^#:\n;]+)/i, /^(?:[^#:\n;]+)/i, /^(?::[^#\n;]+)/i, /^(?::)/i, /^(?:$)/i, /^(?:.)/i],
-            conditions: { "INITIAL": { "rules": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], "inclusive": true } }
-        };
-        return lexer;
-    })();
-    parser.lexer = lexer;
-    function Parser() {
-        this.yy = {};
-    }
-    Parser.prototype = parser;parser.Parser = Parser;
-    return new Parser();
+var YYSTATE=YY_START;
+switch($avoiding_name_collisions) {
+case 0:return 10;
+break;
+case 1:/* skip whitespace */
+break;
+case 2:/* skip comments */
+break;
+case 3:/* skip comments */
+break;
+case 4:return 4;
+break;
+case 5:return 11;
+break;
+case 6:return 'date';
+break;
+case 7:return 12;
+break;
+case 8:return 13;
+break;
+case 9:return 14;
+break;
+case 10:return 15;
+break;
+case 11:return ':';
+break;
+case 12:return 6;
+break;
+case 13:return 'INVALID';
+break;
+}
+},
+rules: [/^(?:[\n]+)/i,/^(?:\s+)/i,/^(?:#[^\n]*)/i,/^(?:%[^\n]*)/i,/^(?:gantt\b)/i,/^(?:dateFormat\s[^#\n;]+)/i,/^(?:\d\d\d\d-\d\d-\d\d\b)/i,/^(?:title\s[^#\n;]+)/i,/^(?:section\s[^#:\n;]+)/i,/^(?:[^#:\n;]+)/i,/^(?::[^#\n;]+)/i,/^(?::)/i,/^(?:$)/i,/^(?:.)/i],
+conditions: {"INITIAL":{"rules":[0,1,2,3,4,5,6,7,8,9,10,11,12,13],"inclusive":true}}
+});
+return lexer;
+})();
+parser.lexer = lexer;
+function Parser () {
+  this.yy = {};
+}
+Parser.prototype = parser;parser.Parser = Parser;
+return new Parser;
 })();
 
-if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
-    exports.parser = gantt;
-    exports.Parser = gantt.Parser;
-    exports.parse = function () {
-        return gantt.parse.apply(gantt, arguments);
-    };
-    exports.main = function commonjsMain(args) {
-        if (!args[1]) {
-            console.log('Usage: ' + args[0] + ' FILE');
-            process.exit(1);
-        }
-        var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
-        return exports.parser.parse(source);
-    };
-    if (typeof module !== 'undefined' && require.main === module) {
-        exports.main(process.argv.slice(1));
-    }
-}
 
-}).call(this,require('_process'))
-},{"_process":3,"fs":1,"path":2}],122:[function(require,module,exports){
+if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
+exports.parser = parser;
+exports.Parser = parser.Parser;
+exports.parse = function () { return parser.parse.apply(parser, arguments); };
+exports.main = function commonjsMain(args) {
+    if (!args[1]) {
+        console.log('Usage: '+args[0]+' FILE');
+        process.exit(1);
+    }
+    var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
+    return exports.parser.parse(source);
+};
+if (typeof module !== 'undefined' && require.main === module) {
+  exports.main(process.argv.slice(1));
+}
+}
+}).call(this,require("1YiZ5S"))
+},{"1YiZ5S":104,"fs":102,"path":103}],122:[function(require,module,exports){
 (function (process){
-/* parser generated by jison 0.4.15 */
+/* parser generated by jison 0.4.16 */
 /*
   Returns a Parser object of the following structure:
 
@@ -37488,859 +37834,821 @@ if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
     recoverable: (boolean: TRUE when the parser has a error recovery rule available for this particular error)
   }
 */
-"use strict";
+var parser = (function(){
+var o=function(k,v,o,l){for(o=o||{},l=k.length;l--;o[k[l]]=v);return o},$V0=[2,2],$V1=[1,5],$V2=[1,7],$V3=[1,8],$V4=[1,11],$V5=[1,12],$V6=[1,13],$V7=[1,14],$V8=[1,15],$V9=[1,17],$Va=[1,18],$Vb=[1,7,9,10,16,18,19,20,21,22,23,25,26,35],$Vc=[1,28],$Vd=[1,29],$Ve=[7,9,10,16,18,19,20,21,23,26,35],$Vf=[1,57];
+var parser = {trace: function trace() { },
+yy: {},
+symbols_: {"error":2,"start":3,"SD":4,"document":5,"line":6,"SPACE":7,"statement":8,"NL":9,"participant":10,"actor":11,"AS":12,"restOfLine":13,"signal":14,"note_statement":15,"title":16,"text":17,"loop":18,"end":19,"opt":20,"alt":21,"else":22,"activate":23,"placement":24,"deactivate":25,"note":26,"text2":27,"over":28,"actor_pair":29,"spaceList":30,",":31,"left_of":32,"right_of":33,"signaltype":34,"ACTOR":35,"SOLID_OPEN_ARROW":36,"DOTTED_OPEN_ARROW":37,"SOLID_ARROW":38,"DOTTED_ARROW":39,"SOLID_CROSS":40,"DOTTED_CROSS":41,"TXT":42,"$accept":0,"$end":1},
+terminals_: {2:"error",4:"SD",7:"SPACE",9:"NL",10:"participant",12:"AS",13:"restOfLine",16:"title",17:"text",18:"loop",19:"end",20:"opt",21:"alt",22:"else",23:"activate",25:"deactivate",26:"note",28:"over",31:",",32:"left_of",33:"right_of",35:"ACTOR",36:"SOLID_OPEN_ARROW",37:"DOTTED_OPEN_ARROW",38:"SOLID_ARROW",39:"DOTTED_ARROW",40:"SOLID_CROSS",41:"DOTTED_CROSS",42:"TXT"},
+productions_: [0,[3,2],[5,0],[5,2],[6,2],[6,1],[6,1],[8,5],[8,3],[8,2],[8,2],[8,4],[8,4],[8,4],[8,7],[8,5],[15,4],[15,4],[30,2],[30,1],[29,3],[29,1],[24,1],[24,1],[14,4],[11,1],[34,1],[34,1],[34,1],[34,1],[34,1],[34,1],[27,1]],
+performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
+/* this == yyval */
 
-var sequenceDiagram = (function () {
-    var o = function o(k, v, _o, l) {
-        for (_o = _o || {}, l = k.length; l--; _o[k[l]] = v);return _o;
-    },
-        $V0 = [2, 2],
-        $V1 = [1, 5],
-        $V2 = [1, 7],
-        $V3 = [1, 8],
-        $V4 = [1, 11],
-        $V5 = [1, 12],
-        $V6 = [1, 13],
-        $V7 = [1, 14],
-        $V8 = [1, 16],
-        $V9 = [1, 17],
-        $Va = [1, 7, 9, 10, 16, 18, 19, 20, 21, 22, 23, 33],
-        $Vb = [7, 9, 10, 16, 18, 19, 20, 21, 23, 33],
-        $Vc = [1, 53];
-    var parser = { trace: function trace() {},
-        yy: {},
-        symbols_: { "error": 2, "start": 3, "SD": 4, "document": 5, "line": 6, "SPACE": 7, "statement": 8, "NL": 9, "participant": 10, "actor": 11, "AS": 12, "restOfLine": 13, "signal": 14, "note_statement": 15, "title": 16, "text": 17, "loop": 18, "end": 19, "opt": 20, "alt": 21, "else": 22, "note": 23, "placement": 24, "text2": 25, "over": 26, "actor_pair": 27, "spaceList": 28, ",": 29, "left_of": 30, "right_of": 31, "signaltype": 32, "ACTOR": 33, "SOLID_OPEN_ARROW": 34, "DOTTED_OPEN_ARROW": 35, "SOLID_ARROW": 36, "DOTTED_ARROW": 37, "SOLID_CROSS": 38, "DOTTED_CROSS": 39, "TXT": 40, "$accept": 0, "$end": 1 },
-        terminals_: { 2: "error", 4: "SD", 7: "SPACE", 9: "NL", 10: "participant", 12: "AS", 13: "restOfLine", 16: "title", 17: "text", 18: "loop", 19: "end", 20: "opt", 21: "alt", 22: "else", 23: "note", 26: "over", 29: ",", 30: "left_of", 31: "right_of", 33: "ACTOR", 34: "SOLID_OPEN_ARROW", 35: "DOTTED_OPEN_ARROW", 36: "SOLID_ARROW", 37: "DOTTED_ARROW", 38: "SOLID_CROSS", 39: "DOTTED_CROSS", 40: "TXT" },
-        productions_: [0, [3, 2], [5, 0], [5, 2], [6, 2], [6, 1], [6, 1], [8, 5], [8, 3], [8, 2], [8, 2], [8, 4], [8, 4], [8, 4], [8, 7], [15, 4], [15, 4], [28, 2], [28, 1], [27, 3], [27, 1], [24, 1], [24, 1], [14, 4], [11, 1], [32, 1], [32, 1], [32, 1], [32, 1], [32, 1], [32, 1], [25, 1]],
-        performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, /* action[1] */$$, /* vstack */_$ /* lstack */) {
-            /* this == yyval */
+var $0 = $$.length - 1;
+switch (yystate) {
+case 1:
+ yy.apply($$[$0]);return $$[$0]; 
+break;
+case 2:
+ this.$ = [] 
+break;
+case 3:
+$$[$0-1].push($$[$0]);this.$ = $$[$0-1]
+break;
+case 4: case 5:
+ this.$ = $$[$0] 
+break;
+case 6:
+ this.$=[];
+break;
+case 7:
+$$[$0-3].description=$$[$0-1]; this.$=$$[$0-3];
+break;
+case 8:
+this.$=$$[$0-1];
+break;
+case 12:
 
-            var $0 = $$.length - 1;
-            switch (yystate) {
-                case 1:
-                    yy.apply($$[$0]);return $$[$0];
-                    break;
-                case 2:
-                    this.$ = [];
-                    break;
-                case 3:
-                    $$[$0 - 1].push($$[$0]);this.$ = $$[$0 - 1];
-                    break;
-                case 4:case 5:
-                    this.$ = $$[$0];
-                    break;
-                case 6:
-                    this.$ = [];
-                    break;
-                case 7:
-                    $$[$0 - 3].description = $$[$0 - 1];this.$ = $$[$0 - 3];
-                    break;
-                case 8:
-                    this.$ = $$[$0 - 1];
-                    break;
-                case 12:
+		$$[$0-1].unshift({type: 'loopStart', loopText:$$[$0-2], signalType: yy.LINETYPE.LOOP_START});
+		$$[$0-1].push({type: 'loopEnd', loopText:$$[$0-2], signalType: yy.LINETYPE.LOOP_END});
+		this.$=$$[$0-1];
+break;
+case 13:
 
-                    $$[$0 - 1].unshift({ type: 'loopStart', loopText: $$[$0 - 2], signalType: yy.LINETYPE.LOOP_START });
-                    $$[$0 - 1].push({ type: 'loopEnd', loopText: $$[$0 - 2], signalType: yy.LINETYPE.LOOP_END });
-                    this.$ = $$[$0 - 1];
-                    break;
-                case 13:
+		$$[$0-1].unshift({type: 'optStart', optText:$$[$0-2], signalType: yy.LINETYPE.OPT_START});
+		$$[$0-1].push({type: 'optEnd', optText:$$[$0-2], signalType: yy.LINETYPE.OPT_END});
+		this.$=$$[$0-1];
+break;
+case 14:
 
-                    $$[$0 - 1].unshift({ type: 'optStart', optText: $$[$0 - 2], signalType: yy.LINETYPE.OPT_START });
-                    $$[$0 - 1].push({ type: 'optEnd', optText: $$[$0 - 2], signalType: yy.LINETYPE.OPT_END });
-                    this.$ = $$[$0 - 1];
-                    break;
-                case 14:
+		// Alt start
+		$$[$0-4].unshift({type: 'altStart', altText:$$[$0-5], signalType: yy.LINETYPE.ALT_START});
+		// Content in alt is already in $$[$0-4]
+		// Else
+		$$[$0-4].push({type: 'else', altText:$$[$0-2], signalType: yy.LINETYPE.ALT_ELSE});
+		// Content in other alt
+		$$[$0-4] = $$[$0-4].concat($$[$0-1]);
+		// End
+		$$[$0-4].push({type: 'altEnd', signalType: yy.LINETYPE.ALT_END});
 
-                    // Alt start
-                    $$[$0 - 4].unshift({ type: 'altStart', altText: $$[$0 - 5], signalType: yy.LINETYPE.ALT_START });
-                    // Content in alt is already in $$[$0-4]
-                    // Else
-                    $$[$0 - 4].push({ type: 'else', altText: $$[$0 - 2], signalType: yy.LINETYPE.ALT_ELSE });
-                    // Content in other alt
-                    $$[$0 - 4] = $$[$0 - 4].concat($$[$0 - 1]);
-                    // End
-                    $$[$0 - 4].push({ type: 'altEnd', signalType: yy.LINETYPE.ALT_END });
+		this.$=$$[$0-4];
+break;
+case 15:
 
-                    this.$ = $$[$0 - 4];
-                    break;
-                case 15:
+		$$[$0-2].unshift({type: 'activateStart', actor:$$[$0-2], signalType: yy.LINETYPE.ACT_START});
+		$$[$0-2].push({type: 'activateEnd', actor:$$[$0-2], signalType: yy.LINETYPE.ACT_END});
+		this.$=$$[$0-2];
+break;
+case 16:
 
-                    this.$ = [$$[$0 - 1], { type: 'addNote', placement: $$[$0 - 2], actor: $$[$0 - 1].actor, text: $$[$0] }];
-                    break;
-                case 16:
+		this.$ = [$$[$0-1], {type:'addNote', placement:$$[$0-2], actor:$$[$0-1].actor, text:$$[$0]}];
+break;
+case 17:
 
-                    // Coerce actor_pair into a [to, from, ...] array
-                    $$[$0 - 2] = [].concat($$[$0 - 1], $$[$0 - 1]).slice(0, 2);
-                    $$[$0 - 2][0] = $$[$0 - 2][0].actor;
-                    $$[$0 - 2][1] = $$[$0 - 2][1].actor;
-                    this.$ = [$$[$0 - 1], { type: 'addNote', placement: yy.PLACEMENT.OVER, actor: $$[$0 - 2].slice(0, 2), text: $$[$0] }];
-                    break;
-                case 19:
-                    this.$ = [$$[$0 - 2], $$[$0]];
-                    break;
-                case 20:
-                    this.$ = $$[$0];
-                    break;
-                case 21:
-                    this.$ = yy.PLACEMENT.LEFTOF;
-                    break;
-                case 22:
-                    this.$ = yy.PLACEMENT.RIGHTOF;
-                    break;
-                case 23:
-                    this.$ = [$$[$0 - 3], $$[$0 - 1], { type: 'addMessage', from: $$[$0 - 3].actor, to: $$[$0 - 1].actor, signalType: $$[$0 - 2], msg: $$[$0] }];
-                    break;
-                case 24:
-                    this.$ = { type: 'addActor', actor: $$[$0] };
-                    break;
-                case 25:
-                    this.$ = yy.LINETYPE.SOLID_OPEN;
-                    break;
-                case 26:
-                    this.$ = yy.LINETYPE.DOTTED_OPEN;
-                    break;
-                case 27:
-                    this.$ = yy.LINETYPE.SOLID;
-                    break;
-                case 28:
-                    this.$ = yy.LINETYPE.DOTTED;
-                    break;
-                case 29:
-                    this.$ = yy.LINETYPE.SOLID_CROSS;
-                    break;
-                case 30:
-                    this.$ = yy.LINETYPE.DOTTED_CROSS;
-                    break;
-                case 31:
-                    this.$ = $$[$0].substring(1).trim().replace(/\\n/gm, "\n");
-                    break;
+		// Coerce actor_pair into a [to, from, ...] array
+		$$[$0-2] = [].concat($$[$0-1], $$[$0-1]).slice(0, 2);
+		$$[$0-2][0] = $$[$0-2][0].actor;
+		$$[$0-2][1] = $$[$0-2][1].actor;
+		this.$ = [$$[$0-1], {type:'addNote', placement:yy.PLACEMENT.OVER, actor:$$[$0-2].slice(0, 2), text:$$[$0]}];
+break;
+case 20:
+ this.$ = [$$[$0-2], $$[$0]]; 
+break;
+case 21:
+ this.$ = $$[$0]; 
+break;
+case 22:
+ this.$ = yy.PLACEMENT.LEFTOF; 
+break;
+case 23:
+ this.$ = yy.PLACEMENT.RIGHTOF; 
+break;
+case 24:
+this.$ = [$$[$0-3],$$[$0-1],{type: 'addMessage', from:$$[$0-3].actor, to:$$[$0-1].actor, signalType:$$[$0-2], msg:$$[$0]}]
+break;
+case 25:
+this.$={type: 'addActor', actor:$$[$0]}
+break;
+case 26:
+ this.$ = yy.LINETYPE.SOLID_OPEN; 
+break;
+case 27:
+ this.$ = yy.LINETYPE.DOTTED_OPEN; 
+break;
+case 28:
+ this.$ = yy.LINETYPE.SOLID; 
+break;
+case 29:
+ this.$ = yy.LINETYPE.DOTTED; 
+break;
+case 30:
+ this.$ = yy.LINETYPE.SOLID_CROSS; 
+break;
+case 31:
+ this.$ = yy.LINETYPE.DOTTED_CROSS; 
+break;
+case 32:
+this.$ = $$[$0].substring(1).trim().replace(/\\n/gm, "\n");
+break;
+}
+},
+table: [{3:1,4:[1,2]},{1:[3]},o([1,7,9,10,16,18,20,21,23,26,35],$V0,{5:3}),{1:[2,1],6:4,7:$V1,8:6,9:$V2,10:$V3,11:16,14:9,15:10,16:$V4,18:$V5,20:$V6,21:$V7,23:$V8,26:$V9,35:$Va},o($Vb,[2,3]),{8:19,10:$V3,11:16,14:9,15:10,16:$V4,18:$V5,20:$V6,21:$V7,23:$V8,26:$V9,35:$Va},o($Vb,[2,5]),o($Vb,[2,6]),{11:20,35:$Va},{9:[1,21]},{9:[1,22]},{7:[1,23]},{13:[1,24]},{13:[1,25]},{13:[1,26]},{24:27,32:$Vc,33:$Vd},{34:30,36:[1,31],37:[1,32],38:[1,33],39:[1,34],40:[1,35],41:[1,36]},{24:37,28:[1,38],32:$Vc,33:$Vd},o([7,9,10,12,16,18,20,21,23,25,26,31,35,36,37,38,39,40,41,42],[2,25]),o($Vb,[2,4]),{9:[1,40],12:[1,39]},o($Vb,[2,9]),o($Vb,[2,10]),{17:[1,41]},o($Ve,$V0,{5:42}),o($Ve,$V0,{5:43}),o([7,9,10,16,18,20,21,22,23,26,35],$V0,{5:44}),{11:45,35:$Va},{35:[2,22]},{35:[2,23]},{11:46,35:$Va},{35:[2,26]},{35:[2,27]},{35:[2,28]},{35:[2,29]},{35:[2,30]},{35:[2,31]},{11:47,35:$Va},{11:49,29:48,35:$Va},{13:[1,50]},o($Vb,[2,8]),{9:[1,51]},{6:4,7:$V1,8:6,9:$V2,10:$V3,11:16,14:9,15:10,16:$V4,18:$V5,19:[1,52],20:$V6,21:$V7,23:$V8,26:$V9,35:$Va},{6:4,7:$V1,8:6,9:$V2,10:$V3,11:16,14:9,15:10,16:$V4,18:$V5,19:[1,53],20:$V6,21:$V7,23:$V8,26:$V9,35:$Va},{6:4,7:$V1,8:6,9:$V2,10:$V3,11:16,14:9,15:10,16:$V4,18:$V5,20:$V6,21:$V7,22:[1,54],23:$V8,26:$V9,35:$Va},o([7,9,10,16,18,20,21,23,25,26,35],$V0,{5:55}),{27:56,42:$Vf},{27:58,42:$Vf},{27:59,42:$Vf},{31:[1,60],42:[2,21]},{9:[1,61]},o($Vb,[2,11]),o($Vb,[2,12]),o($Vb,[2,13]),{13:[1,62]},{6:4,7:$V1,8:6,9:$V2,10:$V3,11:16,14:9,15:10,16:$V4,18:$V5,20:$V6,21:$V7,23:$V8,25:[1,63],26:$V9,35:$Va},{9:[2,24]},{9:[2,32]},{9:[2,16]},{9:[2,17]},{11:64,35:$Va},o($Vb,[2,7]),o($Ve,$V0,{5:65}),o($Vb,[2,15]),{42:[2,20]},{6:4,7:$V1,8:6,9:$V2,10:$V3,11:16,14:9,15:10,16:$V4,18:$V5,19:[1,66],20:$V6,21:$V7,23:$V8,26:$V9,35:$Va},o($Vb,[2,14])],
+defaultActions: {28:[2,22],29:[2,23],31:[2,26],32:[2,27],33:[2,28],34:[2,29],35:[2,30],36:[2,31],56:[2,24],57:[2,32],58:[2,16],59:[2,17],64:[2,20]},
+parseError: function parseError(str, hash) {
+    if (hash.recoverable) {
+        this.trace(str);
+    } else {
+        function _parseError (msg, hash) {
+            this.message = msg;
+            this.hash = hash;
+        }
+        _parseError.prototype = new Error();
+
+        throw new _parseError(str, hash);
+    }
+},
+parse: function parse(input) {
+    var self = this, stack = [0], tstack = [], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, recovering = 0, TERROR = 2, EOF = 1;
+    var args = lstack.slice.call(arguments, 1);
+    var lexer = Object.create(this.lexer);
+    var sharedState = { yy: {} };
+    for (var k in this.yy) {
+        if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
+            sharedState.yy[k] = this.yy[k];
+        }
+    }
+    lexer.setInput(input, sharedState.yy);
+    sharedState.yy.lexer = lexer;
+    sharedState.yy.parser = this;
+    if (typeof lexer.yylloc == 'undefined') {
+        lexer.yylloc = {};
+    }
+    var yyloc = lexer.yylloc;
+    lstack.push(yyloc);
+    var ranges = lexer.options && lexer.options.ranges;
+    if (typeof sharedState.yy.parseError === 'function') {
+        this.parseError = sharedState.yy.parseError;
+    } else {
+        this.parseError = Object.getPrototypeOf(this).parseError;
+    }
+    function popStack(n) {
+        stack.length = stack.length - 2 * n;
+        vstack.length = vstack.length - n;
+        lstack.length = lstack.length - n;
+    }
+    _token_stack:
+        var lex = function () {
+            var token;
+            token = lexer.lex() || EOF;
+            if (typeof token !== 'number') {
+                token = self.symbols_[token] || token;
             }
-        },
-        table: [{ 3: 1, 4: [1, 2] }, { 1: [3] }, o([1, 7, 9, 10, 16, 18, 20, 21, 23, 33], $V0, { 5: 3 }), { 1: [2, 1], 6: 4, 7: $V1, 8: 6, 9: $V2, 10: $V3, 11: 15, 14: 9, 15: 10, 16: $V4, 18: $V5, 20: $V6, 21: $V7, 23: $V8, 33: $V9 }, o($Va, [2, 3]), { 8: 18, 10: $V3, 11: 15, 14: 9, 15: 10, 16: $V4, 18: $V5, 20: $V6, 21: $V7, 23: $V8, 33: $V9 }, o($Va, [2, 5]), o($Va, [2, 6]), { 11: 19, 33: $V9 }, { 9: [1, 20] }, { 9: [1, 21] }, { 7: [1, 22] }, { 13: [1, 23] }, { 13: [1, 24] }, { 13: [1, 25] }, { 32: 26, 34: [1, 27], 35: [1, 28], 36: [1, 29], 37: [1, 30], 38: [1, 31], 39: [1, 32] }, { 24: 33, 26: [1, 34], 30: [1, 35], 31: [1, 36] }, o([9, 12, 29, 34, 35, 36, 37, 38, 39, 40], [2, 24]), o($Va, [2, 4]), { 9: [1, 38], 12: [1, 37] }, o($Va, [2, 9]), o($Va, [2, 10]), { 17: [1, 39] }, o($Vb, $V0, { 5: 40 }), o($Vb, $V0, { 5: 41 }), o([7, 9, 10, 16, 18, 20, 21, 22, 23, 33], $V0, { 5: 42 }), { 11: 43, 33: $V9 }, { 33: [2, 25] }, { 33: [2, 26] }, { 33: [2, 27] }, { 33: [2, 28] }, { 33: [2, 29] }, { 33: [2, 30] }, { 11: 44, 33: $V9 }, { 11: 46, 27: 45, 33: $V9 }, { 33: [2, 21] }, { 33: [2, 22] }, { 13: [1, 47] }, o($Va, [2, 8]), { 9: [1, 48] }, { 6: 4, 7: $V1, 8: 6, 9: $V2, 10: $V3, 11: 15, 14: 9, 15: 10, 16: $V4, 18: $V5, 19: [1, 49], 20: $V6, 21: $V7, 23: $V8, 33: $V9 }, { 6: 4, 7: $V1, 8: 6, 9: $V2, 10: $V3, 11: 15, 14: 9, 15: 10, 16: $V4, 18: $V5, 19: [1, 50], 20: $V6, 21: $V7, 23: $V8, 33: $V9 }, { 6: 4, 7: $V1, 8: 6, 9: $V2, 10: $V3, 11: 15, 14: 9, 15: 10, 16: $V4, 18: $V5, 20: $V6, 21: $V7, 22: [1, 51], 23: $V8, 33: $V9 }, { 25: 52, 40: $Vc }, { 25: 54, 40: $Vc }, { 25: 55, 40: $Vc }, { 29: [1, 56], 40: [2, 20] }, { 9: [1, 57] }, o($Va, [2, 11]), o($Va, [2, 12]), o($Va, [2, 13]), { 13: [1, 58] }, { 9: [2, 23] }, { 9: [2, 31] }, { 9: [2, 15] }, { 9: [2, 16] }, { 11: 59, 33: $V9 }, o($Va, [2, 7]), o($Vb, $V0, { 5: 60 }), { 40: [2, 19] }, { 6: 4, 7: $V1, 8: 6, 9: $V2, 10: $V3, 11: 15, 14: 9, 15: 10, 16: $V4, 18: $V5, 19: [1, 61], 20: $V6, 21: $V7, 23: $V8, 33: $V9 }, o($Va, [2, 14])],
-        defaultActions: { 27: [2, 25], 28: [2, 26], 29: [2, 27], 30: [2, 28], 31: [2, 29], 32: [2, 30], 35: [2, 21], 36: [2, 22], 52: [2, 23], 53: [2, 31], 54: [2, 15], 55: [2, 16], 59: [2, 19] },
-        parseError: function parseError(str, hash) {
-            if (hash.recoverable) {
-                this.trace(str);
-            } else {
-                var _parseError = function _parseError(msg, hash) {
-                    this.message = msg;
-                    this.hash = hash;
-                };
-
-                _parseError.prototype = new Error();
-
-                throw new _parseError(str, hash);
+            return token;
+        };
+    var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
+    while (true) {
+        state = stack[stack.length - 1];
+        if (this.defaultActions[state]) {
+            action = this.defaultActions[state];
+        } else {
+            if (symbol === null || typeof symbol == 'undefined') {
+                symbol = lex();
             }
-        },
-        parse: function parse(input) {
-            var self = this,
-                stack = [0],
-                tstack = [],
-                vstack = [null],
-                lstack = [],
-                table = this.table,
-                yytext = '',
-                yylineno = 0,
-                yyleng = 0,
-                recovering = 0,
-                TERROR = 2,
-                EOF = 1;
-            var args = lstack.slice.call(arguments, 1);
-            var lexer = Object.create(this.lexer);
-            var sharedState = { yy: {} };
-            for (var k in this.yy) {
-                if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
-                    sharedState.yy[k] = this.yy[k];
+            action = table[state] && table[state][symbol];
+        }
+                    if (typeof action === 'undefined' || !action.length || !action[0]) {
+                var errStr = '';
+                expected = [];
+                for (p in table[state]) {
+                    if (this.terminals_[p] && p > TERROR) {
+                        expected.push('\'' + this.terminals_[p] + '\'');
+                    }
                 }
-            }
-            lexer.setInput(input, sharedState.yy);
-            sharedState.yy.lexer = lexer;
-            sharedState.yy.parser = this;
-            if (typeof lexer.yylloc == 'undefined') {
-                lexer.yylloc = {};
-            }
-            var yyloc = lexer.yylloc;
-            lstack.push(yyloc);
-            var ranges = lexer.options && lexer.options.ranges;
-            if (typeof sharedState.yy.parseError === 'function') {
-                this.parseError = sharedState.yy.parseError;
-            } else {
-                this.parseError = Object.getPrototypeOf(this).parseError;
-            }
-            function popStack(n) {
-                stack.length = stack.length - 2 * n;
-                vstack.length = vstack.length - n;
-                lstack.length = lstack.length - n;
-            }
-            _token_stack: var lex = function lex() {
-                var token;
-                token = lexer.lex() || EOF;
-                if (typeof token !== 'number') {
-                    token = self.symbols_[token] || token;
+                if (lexer.showPosition) {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
+                } else {
+                    errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
                 }
-                return token;
+                this.parseError(errStr, {
+                    text: lexer.match,
+                    token: this.terminals_[symbol] || symbol,
+                    line: lexer.yylineno,
+                    loc: yyloc,
+                    expected: expected
+                });
+            }
+        if (action[0] instanceof Array && action.length > 1) {
+            throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
+        }
+        switch (action[0]) {
+        case 1:
+            stack.push(symbol);
+            vstack.push(lexer.yytext);
+            lstack.push(lexer.yylloc);
+            stack.push(action[1]);
+            symbol = null;
+            if (!preErrorSymbol) {
+                yyleng = lexer.yyleng;
+                yytext = lexer.yytext;
+                yylineno = lexer.yylineno;
+                yyloc = lexer.yylloc;
+                if (recovering > 0) {
+                    recovering--;
+                }
+            } else {
+                symbol = preErrorSymbol;
+                preErrorSymbol = null;
+            }
+            break;
+        case 2:
+            len = this.productions_[action[1]][1];
+            yyval.$ = vstack[vstack.length - len];
+            yyval._$ = {
+                first_line: lstack[lstack.length - (len || 1)].first_line,
+                last_line: lstack[lstack.length - 1].last_line,
+                first_column: lstack[lstack.length - (len || 1)].first_column,
+                last_column: lstack[lstack.length - 1].last_column
             };
-            var symbol,
-                preErrorSymbol,
-                state,
-                action,
-                a,
-                r,
-                yyval = {},
-                p,
-                len,
-                newState,
-                expected;
-            while (true) {
-                state = stack[stack.length - 1];
-                if (this.defaultActions[state]) {
-                    action = this.defaultActions[state];
-                } else {
-                    if (symbol === null || typeof symbol == 'undefined') {
-                        symbol = lex();
-                    }
-                    action = table[state] && table[state][symbol];
-                }
-                if (typeof action === 'undefined' || !action.length || !action[0]) {
-                    var errStr = '';
-                    expected = [];
-                    for (p in table[state]) {
-                        if (this.terminals_[p] && p > TERROR) {
-                            expected.push('\'' + this.terminals_[p] + '\'');
-                        }
-                    }
-                    if (lexer.showPosition) {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
-                    } else {
-                        errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
-                    }
-                    this.parseError(errStr, {
-                        text: lexer.match,
-                        token: this.terminals_[symbol] || symbol,
-                        line: lexer.yylineno,
-                        loc: yyloc,
-                        expected: expected
-                    });
-                }
-                if (action[0] instanceof Array && action.length > 1) {
-                    throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
-                }
-                switch (action[0]) {
-                    case 1:
-                        stack.push(symbol);
-                        vstack.push(lexer.yytext);
-                        lstack.push(lexer.yylloc);
-                        stack.push(action[1]);
-                        symbol = null;
-                        if (!preErrorSymbol) {
-                            yyleng = lexer.yyleng;
-                            yytext = lexer.yytext;
-                            yylineno = lexer.yylineno;
-                            yyloc = lexer.yylloc;
-                            if (recovering > 0) {
-                                recovering--;
-                            }
-                        } else {
-                            symbol = preErrorSymbol;
-                            preErrorSymbol = null;
-                        }
-                        break;
-                    case 2:
-                        len = this.productions_[action[1]][1];
-                        yyval.$ = vstack[vstack.length - len];
-                        yyval._$ = {
-                            first_line: lstack[lstack.length - (len || 1)].first_line,
-                            last_line: lstack[lstack.length - 1].last_line,
-                            first_column: lstack[lstack.length - (len || 1)].first_column,
-                            last_column: lstack[lstack.length - 1].last_column
-                        };
-                        if (ranges) {
-                            yyval._$.range = [lstack[lstack.length - (len || 1)].range[0], lstack[lstack.length - 1].range[1]];
-                        }
-                        r = this.performAction.apply(yyval, [yytext, yyleng, yylineno, sharedState.yy, action[1], vstack, lstack].concat(args));
-                        if (typeof r !== 'undefined') {
-                            return r;
-                        }
-                        if (len) {
-                            stack = stack.slice(0, -1 * len * 2);
-                            vstack = vstack.slice(0, -1 * len);
-                            lstack = lstack.slice(0, -1 * len);
-                        }
-                        stack.push(this.productions_[action[1]][0]);
-                        vstack.push(yyval.$);
-                        lstack.push(yyval._$);
-                        newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
-                        stack.push(newState);
-                        break;
-                    case 3:
-                        return true;
-                }
+            if (ranges) {
+                yyval._$.range = [
+                    lstack[lstack.length - (len || 1)].range[0],
+                    lstack[lstack.length - 1].range[1]
+                ];
             }
+            r = this.performAction.apply(yyval, [
+                yytext,
+                yyleng,
+                yylineno,
+                sharedState.yy,
+                action[1],
+                vstack,
+                lstack
+            ].concat(args));
+            if (typeof r !== 'undefined') {
+                return r;
+            }
+            if (len) {
+                stack = stack.slice(0, -1 * len * 2);
+                vstack = vstack.slice(0, -1 * len);
+                lstack = lstack.slice(0, -1 * len);
+            }
+            stack.push(this.productions_[action[1]][0]);
+            vstack.push(yyval.$);
+            lstack.push(yyval._$);
+            newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
+            stack.push(newState);
+            break;
+        case 3:
             return true;
-        } };
+        }
+    }
+    return true;
+}};
 
-    /* generated by jison-lex 0.3.4 */
-    var lexer = (function () {
-        var lexer = {
+/* generated by jison-lex 0.3.4 */
+var lexer = (function(){
+var lexer = ({
 
-            EOF: 1,
+EOF:1,
 
-            parseError: function parseError(str, hash) {
-                if (this.yy.parser) {
-                    this.yy.parser.parseError(str, hash);
-                } else {
-                    throw new Error(str);
-                }
-            },
+parseError:function parseError(str, hash) {
+        if (this.yy.parser) {
+            this.yy.parser.parseError(str, hash);
+        } else {
+            throw new Error(str);
+        }
+    },
 
-            // resets the lexer, sets new input
-            setInput: function setInput(input, yy) {
-                this.yy = yy || this.yy || {};
-                this._input = input;
-                this._more = this._backtrack = this.done = false;
-                this.yylineno = this.yyleng = 0;
-                this.yytext = this.matched = this.match = '';
-                this.conditionStack = ['INITIAL'];
-                this.yylloc = {
-                    first_line: 1,
-                    first_column: 0,
-                    last_line: 1,
-                    last_column: 0
-                };
-                if (this.options.ranges) {
-                    this.yylloc.range = [0, 0];
-                }
-                this.offset = 0;
-                return this;
-            },
+// resets the lexer, sets new input
+setInput:function (input, yy) {
+        this.yy = yy || this.yy || {};
+        this._input = input;
+        this._more = this._backtrack = this.done = false;
+        this.yylineno = this.yyleng = 0;
+        this.yytext = this.matched = this.match = '';
+        this.conditionStack = ['INITIAL'];
+        this.yylloc = {
+            first_line: 1,
+            first_column: 0,
+            last_line: 1,
+            last_column: 0
+        };
+        if (this.options.ranges) {
+            this.yylloc.range = [0,0];
+        }
+        this.offset = 0;
+        return this;
+    },
 
-            // consumes and returns one char from the input
-            input: function input() {
-                var ch = this._input[0];
-                this.yytext += ch;
-                this.yyleng++;
-                this.offset++;
-                this.match += ch;
-                this.matched += ch;
-                var lines = ch.match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno++;
-                    this.yylloc.last_line++;
-                } else {
-                    this.yylloc.last_column++;
-                }
-                if (this.options.ranges) {
-                    this.yylloc.range[1]++;
-                }
+// consumes and returns one char from the input
+input:function () {
+        var ch = this._input[0];
+        this.yytext += ch;
+        this.yyleng++;
+        this.offset++;
+        this.match += ch;
+        this.matched += ch;
+        var lines = ch.match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno++;
+            this.yylloc.last_line++;
+        } else {
+            this.yylloc.last_column++;
+        }
+        if (this.options.ranges) {
+            this.yylloc.range[1]++;
+        }
 
-                this._input = this._input.slice(1);
-                return ch;
-            },
+        this._input = this._input.slice(1);
+        return ch;
+    },
 
-            // unshifts one char (or a string) into the input
-            unput: function unput(ch) {
-                var len = ch.length;
-                var lines = ch.split(/(?:\r\n?|\n)/g);
+// unshifts one char (or a string) into the input
+unput:function (ch) {
+        var len = ch.length;
+        var lines = ch.split(/(?:\r\n?|\n)/g);
 
-                this._input = ch + this._input;
-                this.yytext = this.yytext.substr(0, this.yytext.length - len);
-                //this.yyleng -= len;
-                this.offset -= len;
-                var oldLines = this.match.split(/(?:\r\n?|\n)/g);
-                this.match = this.match.substr(0, this.match.length - 1);
-                this.matched = this.matched.substr(0, this.matched.length - 1);
+        this._input = ch + this._input;
+        this.yytext = this.yytext.substr(0, this.yytext.length - len);
+        //this.yyleng -= len;
+        this.offset -= len;
+        var oldLines = this.match.split(/(?:\r\n?|\n)/g);
+        this.match = this.match.substr(0, this.match.length - 1);
+        this.matched = this.matched.substr(0, this.matched.length - 1);
 
-                if (lines.length - 1) {
-                    this.yylineno -= lines.length - 1;
-                }
-                var r = this.yylloc.range;
+        if (lines.length - 1) {
+            this.yylineno -= lines.length - 1;
+        }
+        var r = this.yylloc.range;
 
-                this.yylloc = {
+        this.yylloc = {
+            first_line: this.yylloc.first_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.first_column,
+            last_column: lines ?
+                (lines.length === oldLines.length ? this.yylloc.first_column : 0)
+                 + oldLines[oldLines.length - lines.length].length - lines[0].length :
+              this.yylloc.first_column - len
+        };
+
+        if (this.options.ranges) {
+            this.yylloc.range = [r[0], r[0] + this.yyleng - len];
+        }
+        this.yyleng = this.yytext.length;
+        return this;
+    },
+
+// When called from action, caches matched text and appends it on next action
+more:function () {
+        this._more = true;
+        return this;
+    },
+
+// When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
+reject:function () {
+        if (this.options.backtrack_lexer) {
+            this._backtrack = true;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+
+        }
+        return this;
+    },
+
+// retain first n characters of the match
+less:function (n) {
+        this.unput(this.match.slice(n));
+    },
+
+// displays already matched input, i.e. for error messages
+pastInput:function () {
+        var past = this.matched.substr(0, this.matched.length - this.match.length);
+        return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
+    },
+
+// displays upcoming input, i.e. for error messages
+upcomingInput:function () {
+        var next = this.match;
+        if (next.length < 20) {
+            next += this._input.substr(0, 20-next.length);
+        }
+        return (next.substr(0,20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
+    },
+
+// displays the character position where the lexing error occurred, i.e. for error messages
+showPosition:function () {
+        var pre = this.pastInput();
+        var c = new Array(pre.length + 1).join("-");
+        return pre + this.upcomingInput() + "\n" + c + "^";
+    },
+
+// test the lexed token: return FALSE when not a match, otherwise return token
+test_match:function (match, indexed_rule) {
+        var token,
+            lines,
+            backup;
+
+        if (this.options.backtrack_lexer) {
+            // save context
+            backup = {
+                yylineno: this.yylineno,
+                yylloc: {
                     first_line: this.yylloc.first_line,
-                    last_line: this.yylineno + 1,
+                    last_line: this.last_line,
                     first_column: this.yylloc.first_column,
-                    last_column: lines ? (lines.length === oldLines.length ? this.yylloc.first_column : 0) + oldLines[oldLines.length - lines.length].length - lines[0].length : this.yylloc.first_column - len
-                };
+                    last_column: this.yylloc.last_column
+                },
+                yytext: this.yytext,
+                match: this.match,
+                matches: this.matches,
+                matched: this.matched,
+                yyleng: this.yyleng,
+                offset: this.offset,
+                _more: this._more,
+                _input: this._input,
+                yy: this.yy,
+                conditionStack: this.conditionStack.slice(0),
+                done: this.done
+            };
+            if (this.options.ranges) {
+                backup.yylloc.range = this.yylloc.range.slice(0);
+            }
+        }
 
-                if (this.options.ranges) {
-                    this.yylloc.range = [r[0], r[0] + this.yyleng - len];
-                }
-                this.yyleng = this.yytext.length;
-                return this;
-            },
+        lines = match[0].match(/(?:\r\n?|\n).*/g);
+        if (lines) {
+            this.yylineno += lines.length;
+        }
+        this.yylloc = {
+            first_line: this.yylloc.last_line,
+            last_line: this.yylineno + 1,
+            first_column: this.yylloc.last_column,
+            last_column: lines ?
+                         lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length :
+                         this.yylloc.last_column + match[0].length
+        };
+        this.yytext += match[0];
+        this.match += match[0];
+        this.matches = match;
+        this.yyleng = this.yytext.length;
+        if (this.options.ranges) {
+            this.yylloc.range = [this.offset, this.offset += this.yyleng];
+        }
+        this._more = false;
+        this._backtrack = false;
+        this._input = this._input.slice(match[0].length);
+        this.matched += match[0];
+        token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
+        if (this.done && this._input) {
+            this.done = false;
+        }
+        if (token) {
+            return token;
+        } else if (this._backtrack) {
+            // recover context
+            for (var k in backup) {
+                this[k] = backup[k];
+            }
+            return false; // rule action called reject() implying the next rule should be tested instead.
+        }
+        return false;
+    },
 
-            // When called from action, caches matched text and appends it on next action
-            more: function more() {
-                this._more = true;
-                return this;
-            },
+// return next match in input
+next:function () {
+        if (this.done) {
+            return this.EOF;
+        }
+        if (!this._input) {
+            this.done = true;
+        }
 
-            // When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
-            reject: function reject() {
+        var token,
+            match,
+            tempMatch,
+            index;
+        if (!this._more) {
+            this.yytext = '';
+            this.match = '';
+        }
+        var rules = this._currentRules();
+        for (var i = 0; i < rules.length; i++) {
+            tempMatch = this._input.match(this.rules[rules[i]]);
+            if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
+                match = tempMatch;
+                index = i;
                 if (this.options.backtrack_lexer) {
-                    this._backtrack = true;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-                return this;
-            },
-
-            // retain first n characters of the match
-            less: function less(n) {
-                this.unput(this.match.slice(n));
-            },
-
-            // displays already matched input, i.e. for error messages
-            pastInput: function pastInput() {
-                var past = this.matched.substr(0, this.matched.length - this.match.length);
-                return (past.length > 20 ? '...' : '') + past.substr(-20).replace(/\n/g, "");
-            },
-
-            // displays upcoming input, i.e. for error messages
-            upcomingInput: function upcomingInput() {
-                var next = this.match;
-                if (next.length < 20) {
-                    next += this._input.substr(0, 20 - next.length);
-                }
-                return (next.substr(0, 20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
-            },
-
-            // displays the character position where the lexing error occurred, i.e. for error messages
-            showPosition: function showPosition() {
-                var pre = this.pastInput();
-                var c = new Array(pre.length + 1).join("-");
-                return pre + this.upcomingInput() + "\n" + c + "^";
-            },
-
-            // test the lexed token: return FALSE when not a match, otherwise return token
-            test_match: function test_match(match, indexed_rule) {
-                var token, lines, backup;
-
-                if (this.options.backtrack_lexer) {
-                    // save context
-                    backup = {
-                        yylineno: this.yylineno,
-                        yylloc: {
-                            first_line: this.yylloc.first_line,
-                            last_line: this.last_line,
-                            first_column: this.yylloc.first_column,
-                            last_column: this.yylloc.last_column
-                        },
-                        yytext: this.yytext,
-                        match: this.match,
-                        matches: this.matches,
-                        matched: this.matched,
-                        yyleng: this.yyleng,
-                        offset: this.offset,
-                        _more: this._more,
-                        _input: this._input,
-                        yy: this.yy,
-                        conditionStack: this.conditionStack.slice(0),
-                        done: this.done
-                    };
-                    if (this.options.ranges) {
-                        backup.yylloc.range = this.yylloc.range.slice(0);
-                    }
-                }
-
-                lines = match[0].match(/(?:\r\n?|\n).*/g);
-                if (lines) {
-                    this.yylineno += lines.length;
-                }
-                this.yylloc = {
-                    first_line: this.yylloc.last_line,
-                    last_line: this.yylineno + 1,
-                    first_column: this.yylloc.last_column,
-                    last_column: lines ? lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length : this.yylloc.last_column + match[0].length
-                };
-                this.yytext += match[0];
-                this.match += match[0];
-                this.matches = match;
-                this.yyleng = this.yytext.length;
-                if (this.options.ranges) {
-                    this.yylloc.range = [this.offset, this.offset += this.yyleng];
-                }
-                this._more = false;
-                this._backtrack = false;
-                this._input = this._input.slice(match[0].length);
-                this.matched += match[0];
-                token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
-                if (this.done && this._input) {
-                    this.done = false;
-                }
-                if (token) {
-                    return token;
-                } else if (this._backtrack) {
-                    // recover context
-                    for (var k in backup) {
-                        this[k] = backup[k];
-                    }
-                    return false; // rule action called reject() implying the next rule should be tested instead.
-                }
-                return false;
-            },
-
-            // return next match in input
-            next: function next() {
-                if (this.done) {
-                    return this.EOF;
-                }
-                if (!this._input) {
-                    this.done = true;
-                }
-
-                var token, match, tempMatch, index;
-                if (!this._more) {
-                    this.yytext = '';
-                    this.match = '';
-                }
-                var rules = this._currentRules();
-                for (var i = 0; i < rules.length; i++) {
-                    tempMatch = this._input.match(this.rules[rules[i]]);
-                    if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
-                        match = tempMatch;
-                        index = i;
-                        if (this.options.backtrack_lexer) {
-                            token = this.test_match(tempMatch, rules[i]);
-                            if (token !== false) {
-                                return token;
-                            } else if (this._backtrack) {
-                                match = false;
-                                continue; // rule action called reject() implying a rule MISmatch.
-                            } else {
-                                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                                    return false;
-                                }
-                        } else if (!this.options.flex) {
-                            break;
-                        }
-                    }
-                }
-                if (match) {
-                    token = this.test_match(match, rules[index]);
+                    token = this.test_match(tempMatch, rules[i]);
                     if (token !== false) {
                         return token;
+                    } else if (this._backtrack) {
+                        match = false;
+                        continue; // rule action called reject() implying a rule MISmatch.
+                    } else {
+                        // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+                        return false;
                     }
-                    // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
-                    return false;
+                } else if (!this.options.flex) {
+                    break;
                 }
-                if (this._input === "") {
-                    return this.EOF;
-                } else {
-                    return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
-                        text: "",
-                        token: null,
-                        line: this.yylineno
-                    });
-                }
-            },
+            }
+        }
+        if (match) {
+            token = this.test_match(match, rules[index]);
+            if (token !== false) {
+                return token;
+            }
+            // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+            return false;
+        }
+        if (this._input === "") {
+            return this.EOF;
+        } else {
+            return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
+                text: "",
+                token: null,
+                line: this.yylineno
+            });
+        }
+    },
 
-            // return next match that has a token
-            lex: function lex() {
-                var r = this.next();
-                if (r) {
-                    return r;
-                } else {
-                    return this.lex();
-                }
-            },
+// return next match that has a token
+lex:function lex() {
+        var r = this.next();
+        if (r) {
+            return r;
+        } else {
+            return this.lex();
+        }
+    },
 
-            // activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
-            begin: function begin(condition) {
-                this.conditionStack.push(condition);
-            },
+// activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
+begin:function begin(condition) {
+        this.conditionStack.push(condition);
+    },
 
-            // pop the previously active lexer condition state off the condition stack
-            popState: function popState() {
-                var n = this.conditionStack.length - 1;
-                if (n > 0) {
-                    return this.conditionStack.pop();
-                } else {
-                    return this.conditionStack[0];
-                }
-            },
+// pop the previously active lexer condition state off the condition stack
+popState:function popState() {
+        var n = this.conditionStack.length - 1;
+        if (n > 0) {
+            return this.conditionStack.pop();
+        } else {
+            return this.conditionStack[0];
+        }
+    },
 
-            // produce the lexer rule set which is active for the currently active lexer condition state
-            _currentRules: function _currentRules() {
-                if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
-                    return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
-                } else {
-                    return this.conditions["INITIAL"].rules;
-                }
-            },
+// produce the lexer rule set which is active for the currently active lexer condition state
+_currentRules:function _currentRules() {
+        if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
+            return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
+        } else {
+            return this.conditions["INITIAL"].rules;
+        }
+    },
 
-            // return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
-            topState: function topState(n) {
-                n = this.conditionStack.length - 1 - Math.abs(n || 0);
-                if (n >= 0) {
-                    return this.conditionStack[n];
-                } else {
-                    return "INITIAL";
-                }
-            },
+// return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
+topState:function topState(n) {
+        n = this.conditionStack.length - 1 - Math.abs(n || 0);
+        if (n >= 0) {
+            return this.conditionStack[n];
+        } else {
+            return "INITIAL";
+        }
+    },
 
-            // alias for begin(condition)
-            pushState: function pushState(condition) {
-                this.begin(condition);
-            },
+// alias for begin(condition)
+pushState:function pushState(condition) {
+        this.begin(condition);
+    },
 
-            // return the number of states currently on the stack
-            stateStackSize: function stateStackSize() {
-                return this.conditionStack.length;
-            },
-            options: { "case-insensitive": true },
-            performAction: function anonymous(yy, yy_, $avoiding_name_collisions, YY_START) {
-                var YYSTATE = YY_START;
-                switch ($avoiding_name_collisions) {
-                    case 0:
-                        return 9;
-                        break;
-                    case 1:
-                        /* skip all whitespace */
-                        break;
-                    case 2:
-                        /* skip same-line whitespace */
-                        break;
-                    case 3:
-                        /* skip comments */
-                        break;
-                    case 4:
-                        /* skip comments */
-                        break;
-                    case 5:
-                        this.begin('ID');return 10;
-                        break;
-                    case 6:
-                        this.begin('ALIAS');return 33;
-                        break;
-                    case 7:
-                        this.popState();this.popState();this.begin('LINE');return 12;
-                        break;
-                    case 8:
-                        this.popState();this.popState();return 9;
-                        break;
-                    case 9:
-                        this.begin('LINE');return 18;
-                        break;
-                    case 10:
-                        this.begin('LINE');return 20;
-                        break;
-                    case 11:
-                        this.begin('LINE');return 21;
-                        break;
-                    case 12:
-                        this.begin('LINE');return 22;
-                        break;
-                    case 13:
-                        this.popState();return 13;
-                        break;
-                    case 14:
-                        return 19;
-                        break;
-                    case 15:
-                        return 30;
-                        break;
-                    case 16:
-                        return 31;
-                        break;
-                    case 17:
-                        return 26;
-                        break;
-                    case 18:
-                        return 23;
-                        break;
-                    case 19:
-                        return 16;
-                        break;
-                    case 20:
-                        return 4;
-                        break;
-                    case 21:
-                        return 29;
-                        break;
-                    case 22:
-                        return 9;
-                        break;
-                    case 23:
-                        return 33;
-                        break;
-                    case 24:
-                        return 36;
-                        break;
-                    case 25:
-                        return 37;
-                        break;
-                    case 26:
-                        return 34;
-                        break;
-                    case 27:
-                        return 35;
-                        break;
-                    case 28:
-                        return 38;
-                        break;
-                    case 29:
-                        return 39;
-                        break;
-                    case 30:
-                        return 40;
-                        break;
-                    case 31:
-                        return 9;
-                        break;
-                    case 32:
-                        return 'INVALID';
-                        break;
-                }
-            },
-            rules: [/^(?:[\n]+)/i, /^(?:\s+)/i, /^(?:((?!\n)\s)+)/i, /^(?:#[^\n]*)/i, /^(?:%[^\n]*)/i, /^(?:participant\b)/i, /^(?:[^\->:\n,;]+?(?=((?!\n)\s)+as(?!\n)\s|[#\n;]|$))/i, /^(?:as\b)/i, /^(?:(?:))/i, /^(?:loop\b)/i, /^(?:opt\b)/i, /^(?:alt\b)/i, /^(?:else\b)/i, /^(?:[^#\n;]*)/i, /^(?:end\b)/i, /^(?:left of\b)/i, /^(?:right of\b)/i, /^(?:over\b)/i, /^(?:note\b)/i, /^(?:title\b)/i, /^(?:sequenceDiagram\b)/i, /^(?:,)/i, /^(?:;)/i, /^(?:[^\->:\n,;]+)/i, /^(?:->>)/i, /^(?:-->>)/i, /^(?:->)/i, /^(?:-->)/i, /^(?:-[x])/i, /^(?:--[x])/i, /^(?::[^#\n;]+)/i, /^(?:$)/i, /^(?:.)/i],
-            conditions: { "LINE": { "rules": [2, 3, 13], "inclusive": false }, "ALIAS": { "rules": [2, 3, 7, 8], "inclusive": false }, "ID": { "rules": [2, 3, 6], "inclusive": false }, "INITIAL": { "rules": [0, 1, 3, 4, 5, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], "inclusive": true } }
-        };
-        return lexer;
-    })();
-    parser.lexer = lexer;
-    function Parser() {
-        this.yy = {};
-    }
-    Parser.prototype = parser;parser.Parser = Parser;
-    return new Parser();
+// return the number of states currently on the stack
+stateStackSize:function stateStackSize() {
+        return this.conditionStack.length;
+    },
+options: {"case-insensitive":true},
+performAction: function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
+var YYSTATE=YY_START;
+switch($avoiding_name_collisions) {
+case 0:return 9;
+break;
+case 1:/* skip all whitespace */
+break;
+case 2:/* skip same-line whitespace */
+break;
+case 3:/* skip comments */
+break;
+case 4:/* skip comments */
+break;
+case 5: this.begin('ID'); return 10; 
+break;
+case 6: this.begin('ALIAS'); return 35; 
+break;
+case 7: this.popState(); this.popState(); this.begin('LINE'); return 12; 
+break;
+case 8: this.popState(); this.popState(); return 9; 
+break;
+case 9: this.begin('LINE'); return 23; 
+break;
+case 10: this.begin('LINE'); return 25; 
+break;
+case 11: this.begin('LINE'); return 18; 
+break;
+case 12: this.begin('LINE'); return 20; 
+break;
+case 13: this.begin('LINE'); return 21; 
+break;
+case 14: this.begin('LINE'); return 22; 
+break;
+case 15: this.popState(); return 13; 
+break;
+case 16:return 19;
+break;
+case 17:return 32;
+break;
+case 18:return 33;
+break;
+case 19:return 28;
+break;
+case 20:return 26;
+break;
+case 21:return 16;
+break;
+case 22:return 4;
+break;
+case 23:return 31;
+break;
+case 24:return 9;
+break;
+case 25:return 35;
+break;
+case 26:return 38;
+break;
+case 27:return 39;
+break;
+case 28:return 36;
+break;
+case 29:return 37;
+break;
+case 30:return 40;
+break;
+case 31:return 41;
+break;
+case 32:return 42;
+break;
+case 33:return 9;
+break;
+case 34:return 'INVALID';
+break;
+}
+},
+rules: [/^(?:[\n]+)/i,/^(?:\s+)/i,/^(?:((?!\n)\s)+)/i,/^(?:#[^\n]*)/i,/^(?:%[^\n]*)/i,/^(?:participant\b)/i,/^(?:[^\->:\n,;]+?(?=((?!\n)\s)+as(?!\n)\s|[#\n;]|$))/i,/^(?:as\b)/i,/^(?:(?:))/i,/^(?:activate\b)/i,/^(?:deactivate\b)/i,/^(?:loop\b)/i,/^(?:opt\b)/i,/^(?:alt\b)/i,/^(?:else\b)/i,/^(?:[^#\n;]*)/i,/^(?:end\b)/i,/^(?:left of\b)/i,/^(?:right of\b)/i,/^(?:over\b)/i,/^(?:note\b)/i,/^(?:title\b)/i,/^(?:sequenceDiagram\b)/i,/^(?:,)/i,/^(?:;)/i,/^(?:[^\->:\n,;]+)/i,/^(?:->>)/i,/^(?:-->>)/i,/^(?:->)/i,/^(?:-->)/i,/^(?:-[x])/i,/^(?:--[x])/i,/^(?::[^#\n;]+)/i,/^(?:$)/i,/^(?:.)/i],
+conditions: {"LINE":{"rules":[2,3,15],"inclusive":false},"ALIAS":{"rules":[2,3,7,8],"inclusive":false},"ID":{"rules":[2,3,6],"inclusive":false},"INITIAL":{"rules":[0,1,3,4,5,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34],"inclusive":true}}
+});
+return lexer;
+})();
+parser.lexer = lexer;
+function Parser () {
+  this.yy = {};
+}
+Parser.prototype = parser;parser.Parser = Parser;
+return new Parser;
 })();
 
-if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
-    exports.parser = sequenceDiagram;
-    exports.Parser = sequenceDiagram.Parser;
-    exports.parse = function () {
-        return sequenceDiagram.parse.apply(sequenceDiagram, arguments);
-    };
-    exports.main = function commonjsMain(args) {
-        if (!args[1]) {
-            console.log('Usage: ' + args[0] + ' FILE');
-            process.exit(1);
-        }
-        var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
-        return exports.parser.parse(source);
-    };
-    if (typeof module !== 'undefined' && require.main === module) {
-        exports.main(process.argv.slice(1));
-    }
-}
 
-}).call(this,require('_process'))
-},{"_process":3,"fs":1,"path":2}],123:[function(require,module,exports){
+if (typeof require !== 'undefined' && typeof exports !== 'undefined') {
+exports.parser = parser;
+exports.Parser = parser.Parser;
+exports.parse = function () { return parser.parse.apply(parser, arguments); };
+exports.main = function commonjsMain(args) {
+    if (!args[1]) {
+        console.log('Usage: '+args[0]+' FILE');
+        process.exit(1);
+    }
+    var source = require('fs').readFileSync(require('path').normalize(args[1]), "utf8");
+    return exports.parser.parse(source);
+};
+if (typeof module !== 'undefined' && require.main === module) {
+  exports.main(process.argv.slice(1));
+}
+}
+}).call(this,require("1YiZ5S"))
+},{"1YiZ5S":104,"fs":102,"path":103}],123:[function(require,module,exports){
 (function (global){
 /**
  * Created by knut on 14-11-19.
  */
-'use strict';
-
-var actors = {};
-var messages = [];
-var notes = [];
+var actors    = {};
+var messages  = [];
+var notes     = [];
 var Logger = require('../../logger');
 var log = new Logger.Log();
 
-exports.addActor = function (id, name, description) {
+
+
+exports.addActor = function(id,name,description){
     // Don't allow description nulling
     var old = actors[id];
-    if (old && name === old.name && description == null) return;
+    if ( old && name === old.name && description == null ) return;
 
     // Don't allow null descriptions, either
-    if (description == null) description = name;
+    if ( description == null ) description = name;
 
-    actors[id] = { name: name, description: description };
+    actors[id] = {name:name, description:description};
 };
 
-exports.addMessage = function (idFrom, idTo, message, answer) {
-    messages.push({ from: idFrom, to: idTo, message: message, answer: answer });
+exports.addMessage = function(idFrom, idTo, message,  answer){
+    messages.push({from:idFrom, to:idTo, message:message, answer:answer});
 };
 
 /**
  *
  */
-exports.addSignal = function (idFrom, idTo, message, messageType) {
-    log.debug('Adding message from=' + idFrom + ' to=' + idTo + ' message=' + message + ' type=' + messageType);
-    messages.push({ from: idFrom, to: idTo, message: message, type: messageType });
+exports.addSignal = function(idFrom, idTo, message,  messageType){
+    log.debug('Adding message from='+idFrom+' to='+idTo+' message='+message+' type='+messageType);
+    messages.push({from:idFrom, to:idTo, message:message, type:messageType});
 };
 
-exports.getMessages = function () {
+exports.getMessages = function(){
     return messages;
 };
 
-exports.getActors = function () {
+exports.getActors = function(){
     return actors;
 };
-exports.getActor = function (id) {
+exports.getActor = function(id){
     return actors[id];
 };
-exports.getActorKeys = function () {
+exports.getActorKeys = function(){
     return Object.keys(actors);
 };
 
-exports.clear = function () {
-    actors = {};
+exports.clear = function(){
+    actors   = {};
     messages = [];
 };
 
 exports.LINETYPE = {
-    SOLID: 0,
-    DOTTED: 1,
-    NOTE: 2,
-    SOLID_CROSS: 3,
-    DOTTED_CROSS: 4,
-    SOLID_OPEN: 5,
-    DOTTED_OPEN: 6,
-    LOOP_START: 10,
-    LOOP_END: 11,
-    ALT_START: 12,
-    ALT_ELSE: 13,
-    ALT_END: 14,
-    OPT_START: 15,
-    OPT_END: 16
+    SOLID        : 0  ,
+    DOTTED       : 1  ,
+    NOTE         : 2  ,
+    SOLID_CROSS  : 3  ,
+    DOTTED_CROSS : 4  ,
+    SOLID_OPEN   : 5  ,
+    DOTTED_OPEN  : 6  ,
+    LOOP_START   : 10 ,
+    LOOP_END     : 11 ,
+    ALT_START    : 12 ,
+    ALT_ELSE     : 13 ,
+    ALT_END      : 14 ,
+    OPT_START    : 15 ,
+    OPT_END      : 16 ,
+    ACT_START    : 17 ,
+    ACT_END      : 18
 };
 
 exports.ARROWTYPE = {
-    FILLED: 0,
-    OPEN: 1
+    FILLED       : 0,
+    OPEN         : 1
 };
 
 exports.PLACEMENT = {
-    LEFTOF: 0,
-    RIGHTOF: 1,
-    OVER: 2
+    LEFTOF       : 0,
+    RIGHTOF      : 1,
+    OVER         : 2
 };
 
-exports.addNote = function (actor, placement, message) {
-    var note = { actor: actor, placement: placement, message: message };
+exports.addNote = function (actor, placement, message){
+    var note = {actor:actor, placement: placement, message:message};
 
     // Coerce actor into a [to, from, ...] array
     var actors = [].concat(actor, actor);
 
     notes.push(note);
-    messages.push({ from: actors[0], to: actors[1], message: message, type: exports.LINETYPE.NOTE, placement: placement });
+    messages.push({from:actors[0], to:actors[1], message:message, type:exports.LINETYPE.NOTE, placement: placement});
 };
 
-exports.parseError = function (err, hash) {
-    global.mermaidAPI.parseError(err, hash);
+
+exports.parseError = function(err,hash){
+    global.mermaidAPI.parseError(err,hash);
 };
 
-exports.apply = function (param) {
-    if (param instanceof Array) {
-        param.forEach(function (item) {
+exports.apply = function(param){
+    if(param instanceof Array ){
+        param.forEach(function(item){
             exports.apply(item);
         });
     } else {
         // log.debug(param);
-        switch (param.type) {
+        switch(param.type){
             case 'addActor':
                 exports.addActor(param.actor, param.actor, param.description);
                 break;
             case 'addNote':
-                exports.addNote(param.actor, param.placement, param.text);
+                exports.addNote(param.actor,param.placement, param.text);
                 break;
             case 'addMessage':
                 exports.addSignal(param.from, param.to, param.msg, param.signalType);
@@ -38361,6 +38669,14 @@ exports.apply = function (param) {
             case 'optEnd':
                 exports.addSignal(undefined, undefined, undefined, param.signalType);
                 break;
+            case 'activateStart':
+                //log.debug('Loop text: ',param.loopText);
+                exports.addSignal(undefined, undefined, param.actor, param.signalType);
+                //yy.addSignal(undefined, undefined, $2, yy.LINETYPE.LOOP_START);
+                break;
+            case 'activateEnd':
+                exports.addSignal(undefined, undefined, param.actor, param.signalType);
+                break;
             case 'altStart':
                 //log.debug('Loop text: ',param.loopText);
                 exports.addSignal(undefined, undefined, param.altText, param.signalType);
@@ -38376,13 +38692,11 @@ exports.apply = function (param) {
     }
 };
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../logger":126}],124:[function(require,module,exports){
+}).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../../logger":127}],124:[function(require,module,exports){
 /**
  * Created by knut on 14-11-23.
  */
-
-'use strict';
 
 var sq = require('./parser/sequenceDiagram').parser;
 sq.yy = require('./sequenceDb');
@@ -38393,112 +38707,121 @@ var log = new Logger.Log();
 
 var conf = {
 
-    diagramMarginX: 50,
-    diagramMarginY: 10,
+    diagramMarginX:50,
+    diagramMarginY:10,
     // Margin between actors
-    actorMargin: 50,
+    actorMargin:50,
     // Width of actor moxes
-    width: 150,
+    width:150,
     // Height of actor boxes
-    height: 65,
+    height:65,
     // Margin around loop boxes
-    boxMargin: 10,
-    boxTextMargin: 5,
-    noteMargin: 10,
+    boxMargin:10,
+    boxTextMargin:5,
+    noteMargin:10,
     // Space between messages
-    messageMargin: 35,
+    messageMargin:35,
     //mirror actors under diagram
-    mirrorActors: false,
+    mirrorActors:false,
     // Depending on css styling this might need adjustment
     // Prolongs the edge of the diagram downwards
-    bottomMarginAdj: 1
+    bottomMarginAdj:1
 };
 
 //var bb = getBBox('path');
 exports.bounds = {
-    data: {
-        startx: undefined,
-        stopx: undefined,
-        starty: undefined,
-        stopy: undefined
+    data:{
+        startx:undefined,
+        stopx :undefined,
+        starty:undefined,
+        stopy :undefined
     },
-    verticalPos: 0,
+    verticalPos:0,
 
     list: [],
-    init: function init() {
+    init    : function(){
         this.list = [];
         this.data = {
-            startx: undefined,
-            stopx: undefined,
-            starty: undefined,
-            stopy: undefined
+            startx:undefined,
+                stopx :undefined,
+                starty:undefined,
+                stopy :undefined
         };
-        this.verticalPos = 0;
+        this.verticalPos =0;
     },
-    updateVal: function updateVal(obj, key, val, fun) {
-        if (typeof obj[key] === 'undefined') {
+    updateVal : function (obj,key,val,fun){
+        if(typeof obj[key] === 'undefined'){
             obj[key] = val;
-        } else {
-            obj[key] = fun(val, obj[key]);
+        }else{
+            obj[key] = fun(val,obj[key]);
         }
     },
-    updateLoops: function updateLoops(startx, starty, stopx, stopy) {
+    updateLoops:function(startx,starty,stopx,stopy){
         var _self = this;
         var cnt = 0;
-        this.list.forEach(function (loop) {
+        this.list.forEach(function(loop){
             cnt++;
             // The loop list is a stack so the biggest margins in the beginning of the list
-            var n = _self.list.length - cnt + 1;
+            var n = _self.list.length-cnt+1;
 
-            _self.updateVal(loop, 'startx', startx - n * conf.boxMargin, Math.min);
-            _self.updateVal(loop, 'starty', starty - n * conf.boxMargin, Math.min);
-            _self.updateVal(loop, 'stopx', stopx + n * conf.boxMargin, Math.max);
-            _self.updateVal(loop, 'stopy', stopy + n * conf.boxMargin, Math.max);
+            _self.updateVal(loop, 'startx',startx - n*conf.boxMargin, Math.min);
+            _self.updateVal(loop, 'starty',starty - n*conf.boxMargin, Math.min);
+            _self.updateVal(loop, 'stopx' ,stopx  + n*conf.boxMargin, Math.max);
+            _self.updateVal(loop, 'stopy' ,stopy  + n*conf.boxMargin, Math.max);
 
-            _self.updateVal(exports.bounds.data, 'startx', startx - n * conf.boxMargin, Math.min);
-            _self.updateVal(exports.bounds.data, 'starty', starty - n * conf.boxMargin, Math.min);
-            _self.updateVal(exports.bounds.data, 'stopx', stopx + n * conf.boxMargin, Math.max);
-            _self.updateVal(exports.bounds.data, 'stopy', stopy + n * conf.boxMargin, Math.max);
+            _self.updateVal(exports.bounds.data,'startx',startx - n*conf.boxMargin ,Math.min);
+            _self.updateVal(exports.bounds.data,'starty',starty - n*conf.boxMargin ,Math.min);
+            _self.updateVal(exports.bounds.data,'stopx' ,stopx  + n*conf.boxMargin ,Math.max);
+            _self.updateVal(exports.bounds.data,'stopy' ,stopy  + n*conf.boxMargin ,Math.max);
         });
     },
-    insert: function insert(startx, starty, stopx, stopy) {
+    insert:function(startx,starty,stopx,stopy){
 
         var _startx, _starty, _stopx, _stopy;
 
-        _startx = Math.min(startx, stopx);
-        _stopx = Math.max(startx, stopx);
-        _starty = Math.min(starty, stopy);
-        _stopy = Math.max(starty, stopy);
+        _startx = Math.min(startx,stopx);
+        _stopx  = Math.max(startx,stopx);
+        _starty = Math.min(starty,stopy);
+        _stopy  = Math.max(starty,stopy);
 
-        this.updateVal(exports.bounds.data, 'startx', _startx, Math.min);
-        this.updateVal(exports.bounds.data, 'starty', _starty, Math.min);
-        this.updateVal(exports.bounds.data, 'stopx', _stopx, Math.max);
-        this.updateVal(exports.bounds.data, 'stopy', _stopy, Math.max);
+        this.updateVal(exports.bounds.data,'startx',_startx,Math.min);
+        this.updateVal(exports.bounds.data,'starty',_starty,Math.min);
+        this.updateVal(exports.bounds.data,'stopx' ,_stopx ,Math.max);
+        this.updateVal(exports.bounds.data,'stopy' ,_stopy ,Math.max);
 
-        this.updateLoops(_startx, _starty, _stopx, _stopy);
+        this.updateLoops(_startx,_starty,_stopx,_stopy);
+
     },
-    newLoop: function newLoop(title) {
-        this.list.push({ startx: undefined, starty: this.verticalPos, stopx: undefined, stopy: undefined, title: title });
+    newLoop:function(title){
+        this.list.push({startx:undefined,starty:this.verticalPos,stopx:undefined,stopy:undefined, title:title});
     },
-    endLoop: function endLoop() {
+    endLoop:function(){
         var loop = this.list.pop();
         //loop.stopy =  exports.bounds.getVerticalPos();
         return loop;
     },
-    addElseToLoop: function addElseToLoop(message) {
+    newActivate:function(title){
+        this.list.push({startx:undefined,starty:this.verticalPos,stopx:undefined,stopy:undefined, title:title});
+    },
+    endActivate:function(){
         var loop = this.list.pop();
-        loop.elsey = exports.bounds.getVerticalPos();
+        //loop.stopy =  exports.bounds.getVerticalPos();
+        return loop;
+    },
+    addElseToLoop:function(message){
+        var loop = this.list.pop();
+        loop.elsey =  exports.bounds.getVerticalPos();
         loop.elseText = message;
         this.list.push(loop);
     },
-    bumpVerticalPos: function bumpVerticalPos(bump) {
+    bumpVerticalPos:function(bump){
         this.verticalPos = this.verticalPos + bump;
         this.data.stopy = this.verticalPos;
     },
-    getVerticalPos: function getVerticalPos() {
+    getVerticalPos:function(){
         return this.verticalPos;
     },
-    getBounds: function getBounds() {
+    getBounds:function(){
         return this.data;
     }
 };
@@ -38509,42 +38832,43 @@ exports.bounds = {
  * @param pos The position if the actor in the liost of actors
  * @param description The text in the box
  */
-var drawNote = function drawNote(elem, startx, verticalPos, msg, forceWidth) {
+var drawNote = function(elem, startx, verticalPos, msg, forceWidth){
     var rect = svgDraw.getNoteRect();
     rect.x = startx;
     rect.y = verticalPos;
     rect.width = forceWidth || conf.width;
-    rect['class'] = 'note';
+    rect.class = 'note';
 
     var g = elem.append('g');
     var rectElem = svgDraw.drawRect(g, rect);
 
     var textObj = svgDraw.getTextObj();
-    textObj.x = startx - 4;
-    textObj.y = verticalPos - 13;
+    textObj.x = startx-4;
+    textObj.y = verticalPos-13;
     textObj.textMargin = conf.noteMargin;
     textObj.dy = '1em';
     textObj.text = msg.message;
-    textObj['class'] = 'noteText';
+    textObj.class = 'noteText';
 
-    var textElem = svgDraw.drawText(g, textObj, rect.width - conf.noteMargin);
+    var textElem = svgDraw.drawText(g,textObj, rect.width-conf.noteMargin);
 
     var textHeight = textElem[0][0].getBBox().height;
-    if (!forceWidth && textHeight > conf.width) {
+    if(!forceWidth && textHeight > conf.width){
         textElem.remove();
         g = elem.append('g');
 
-        textElem = svgDraw.drawText(g, textObj, 2 * rect.width - conf.noteMargin);
+        textElem = svgDraw.drawText(g,textObj, 2*rect.width-conf.noteMargin);
         textHeight = textElem[0][0].getBBox().height;
-        rectElem.attr('width', 2 * rect.width);
-        exports.bounds.insert(startx, verticalPos, startx + 2 * rect.width, verticalPos + 2 * conf.noteMargin + textHeight);
-    } else {
-        exports.bounds.insert(startx, verticalPos, startx + rect.width, verticalPos + 2 * conf.noteMargin + textHeight);
+        rectElem.attr('width',2*rect.width);
+        exports.bounds.insert(startx, verticalPos, startx + 2*rect.width,  verticalPos + 2*conf.noteMargin + textHeight);
+    }else{
+        exports.bounds.insert(startx, verticalPos, startx + rect.width,  verticalPos + 2*conf.noteMargin + textHeight);
     }
 
-    rectElem.attr('height', textHeight + 2 * conf.noteMargin);
-    exports.bounds.bumpVerticalPos(textHeight + 2 * conf.noteMargin);
+    rectElem.attr('height',textHeight+ 2*conf.noteMargin);
+    exports.bounds.bumpVerticalPos(textHeight+ 2*conf.noteMargin);
 };
+
 
 /**
  * Draws a message
@@ -38555,75 +38879,84 @@ var drawNote = function drawNote(elem, startx, verticalPos, msg, forceWidth) {
  * @param txtCenter
  * @param msg
  */
-var drawMessage = function drawMessage(elem, startx, stopx, verticalPos, msg) {
+var drawMessage = function(elem, startx, stopx, verticalPos, msg){
     var g = elem.append('g');
-    var txtCenter = startx + (stopx - startx) / 2;
+    var txtCenter = startx + (stopx-startx)/2;
 
-    var textElem = g.append('text') // text label for the x axis
-    .attr('x', txtCenter).attr('y', verticalPos - 7).style('text-anchor', 'middle').attr('class', 'messageText').text(msg.message);
+    var textElem = g.append('text')      // text label for the x axis
+        .attr('x', txtCenter)
+        .attr('y', verticalPos - 7)
+        .style('text-anchor', 'middle')
+        .attr('class', 'messageText')
+        .text(msg.message);
 
     var textWidth;
 
-    if (typeof textElem[0][0].getBBox !== 'undefined') {
+    if(typeof textElem[0][0].getBBox !== 'undefined'){
         textWidth = textElem[0][0].getBBox().width;
-    } else {
+    }
+    else{
         //textWidth = getBBox(textElem).width; //.getComputedTextLength()
-        textWidth = textElem[0][0].getBoundingClientRect();
-        //textWidth = textElem[0][0].getComputedTextLength();
+        textWidth = textElem[0][0].getBoundingClientRect();  
+        //textWidth = textElem[0][0].getComputedTextLength();  
     }
 
     var line;
 
-    if (startx === stopx) {
-        line = g.append('path').attr('d', 'M ' + startx + ',' + verticalPos + ' C ' + (startx + 60) + ',' + (verticalPos - 10) + ' ' + (startx + 60) + ',' + (verticalPos + 30) + ' ' + startx + ',' + (verticalPos + 20));
+    if(startx===stopx){
+        line  = g.append('path')
+            .attr('d', 'M ' +startx+ ','+verticalPos+' C ' +(startx+60)+ ','+(verticalPos-10)+' ' +(startx+60)+ ',' +
+            (verticalPos+30)+' ' +startx+ ','+(verticalPos+20));
 
         exports.bounds.bumpVerticalPos(30);
-        var dx = Math.max(textWidth / 2, 100);
-        exports.bounds.insert(startx - dx, exports.bounds.getVerticalPos() - 10, stopx + dx, exports.bounds.getVerticalPos());
-    } else {
+        var dx = Math.max(textWidth/2,100);
+        exports.bounds.insert(startx-dx, exports.bounds.getVerticalPos() -10, stopx+dx,  exports.bounds.getVerticalPos());
+    }else{
         line = g.append('line');
         line.attr('x1', startx);
         line.attr('y1', verticalPos);
         line.attr('x2', stopx);
         line.attr('y2', verticalPos);
-        exports.bounds.insert(startx, exports.bounds.getVerticalPos() - 10, stopx, exports.bounds.getVerticalPos());
+        exports.bounds.insert(startx, exports.bounds.getVerticalPos() -10, stopx,  exports.bounds.getVerticalPos());
     }
     //Make an SVG Container
     //Draw the line
     if (msg.type === sq.yy.LINETYPE.DOTTED || msg.type === sq.yy.LINETYPE.DOTTED_CROSS || msg.type === sq.yy.LINETYPE.DOTTED_OPEN) {
-        line.style('stroke-dasharray', '3, 3');
+        line.style('stroke-dasharray', ('3, 3'));
         line.attr('class', 'messageLine1');
-    } else {
+    }
+    else {
         line.attr('class', 'messageLine0');
     }
 
-    var url = '';
-    if (conf.arrowMarkerAbsolute) {
-        url = window.location.protocol + '//' + window.location.host + window.location.pathname + window.location.search;
-        url = url.replace(/\(/g, '\\(');
-        url = url.replace(/\)/g, '\\)');
+    var url =  '';
+    if(conf.arrowMarkerAbsolute){
+        url =  window.location.protocol+'//'+window.location.host+window.location.pathname +window.location.search;
+        url = url.replace(/\(/g,'\\(');
+        url = url.replace(/\)/g,'\\)');
     }
 
     line.attr('stroke-width', 2);
     line.attr('stroke', 'black');
-    line.style('fill', 'none'); // remove any fill colour
-    if (msg.type === sq.yy.LINETYPE.SOLID || msg.type === sq.yy.LINETYPE.DOTTED) {
+    line.style('fill', 'none');     // remove any fill colour
+    if (msg.type === sq.yy.LINETYPE.SOLID || msg.type === sq.yy.LINETYPE.DOTTED){
         line.attr('marker-end', 'url(' + url + '#arrowhead)');
     }
 
-    if (msg.type === sq.yy.LINETYPE.SOLID_CROSS || msg.type === sq.yy.LINETYPE.DOTTED_CROSS) {
+    if (msg.type === sq.yy.LINETYPE.SOLID_CROSS || msg.type === sq.yy.LINETYPE.DOTTED_CROSS){
         line.attr('marker-end', 'url(' + url + '#crosshead)');
     }
+
 };
 
-module.exports.drawActors = function (diagram, actors, actorKeys, verticalPos) {
+module.exports.drawActors = function(diagram, actors, actorKeys,verticalPos){
     var i;
     // Draw the actors
-    for (i = 0; i < actorKeys.length; i++) {
+    for(i=0;i<actorKeys.length;i++){
         var key = actorKeys[i];
 
         // Add some rendering data to the object
-        actors[key].x = i * conf.actorMargin + i * conf.width;
+        actors[key].x = i*conf.actorMargin +i*conf.width;
         actors[key].y = verticalPos;
         actors[key].width = conf.diagramMarginY;
         actors[key].height = conf.diagramMarginY;
@@ -38631,6 +38964,7 @@ module.exports.drawActors = function (diagram, actors, actorKeys, verticalPos) {
         // Draw the box with the attached line
         svgDraw.drawActor(diagram, actors[key].x, verticalPos, actors[key].description, conf);
         exports.bounds.insert(actors[key].x, verticalPos, actors[key].x + conf.width, conf.height);
+
     }
 
     // Add a margin between the actor boxes and the first arrow
@@ -38638,10 +38972,11 @@ module.exports.drawActors = function (diagram, actors, actorKeys, verticalPos) {
     exports.bounds.bumpVerticalPos(conf.height);
 };
 
-module.exports.setConf = function (cnf) {
+
+module.exports.setConf = function(cnf){
     var keys = Object.keys(cnf);
 
-    keys.forEach(function (key) {
+    keys.forEach(function(key){
         conf[key] = cnf[key];
     });
 };
@@ -38652,10 +38987,10 @@ module.exports.setConf = function (cnf) {
  */
 module.exports.draw = function (text, id) {
     sq.yy.clear();
-    sq.parse(text + '\n');
+    sq.parse(text+'\n');
 
     exports.bounds.init();
-    var diagram = d3.select('#' + id);
+    var diagram = d3.select('#'+id);
 
     var startx;
     var stopx;
@@ -38672,27 +39007,29 @@ module.exports.draw = function (text, id) {
     svgDraw.insertArrowCrossHead(diagram);
 
     // Draw the messages/signals
-    messages.forEach(function (msg) {
+    messages.forEach(function(msg){
         var loopData;
 
-        switch (msg.type) {
+        switch(msg.type){
             case sq.yy.LINETYPE.NOTE:
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
 
                 startx = actors[msg.from].x;
                 stopx = actors[msg.to].x;
 
-                if (msg.placement === sq.yy.PLACEMENT.RIGHTOF) {
-                    drawNote(diagram, startx + (conf.width + conf.actorMargin) / 2, exports.bounds.getVerticalPos(), msg);
-                } else if (msg.placement === sq.yy.PLACEMENT.LEFTOF) {
-                    drawNote(diagram, startx - (conf.width + conf.actorMargin) / 2, exports.bounds.getVerticalPos(), msg);
-                } else if (msg.to === msg.from) {
+                if(msg.placement === sq.yy.PLACEMENT.RIGHTOF){
+                    drawNote(diagram, startx + (conf.width + conf.actorMargin)/2, exports.bounds.getVerticalPos(), msg);
+
+                }else if(msg.placement === sq.yy.PLACEMENT.LEFTOF){
+                    drawNote(diagram, startx - (conf.width + conf.actorMargin)/2, exports.bounds.getVerticalPos(), msg);
+                }else if(msg.to === msg.from) {
                     // Single-actor over
                     drawNote(diagram, startx, exports.bounds.getVerticalPos(), msg);
-                } else {
+                }else{
                     // Multi-actor over
                     forceWidth = Math.abs(startx - stopx) + conf.actorMargin;
-                    drawNote(diagram, (startx + stopx + conf.width - forceWidth) / 2, exports.bounds.getVerticalPos(), msg, forceWidth);
+                    drawNote(diagram, (startx + stopx + conf.width - forceWidth)/2, exports.bounds.getVerticalPos(), msg,
+                        forceWidth);
                 }
                 break;
             case sq.yy.LINETYPE.LOOP_START:
@@ -38703,7 +39040,19 @@ module.exports.draw = function (text, id) {
             case sq.yy.LINETYPE.LOOP_END:
                 loopData = exports.bounds.endLoop();
 
-                svgDraw.drawLoop(diagram, loopData, 'loop', conf);
+                svgDraw.drawLoop(diagram, loopData,'loop', conf);
+                exports.bounds.bumpVerticalPos(conf.boxMargin);
+                break;
+
+            case sq.yy.LINETYPE.ACT_START:
+                exports.bounds.bumpVerticalPos(conf.boxMargin);
+                exports.bounds.newLoop(msg.message);
+                exports.bounds.bumpVerticalPos(conf.boxMargin + conf.boxTextMargin);
+                break;
+            case sq.yy.LINETYPE.ACT_END:
+                loopData = exports.bounds.endLoop();
+
+                svgDraw.drawLoop(diagram, loopData,'loop', conf);
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
                 break;
             case sq.yy.LINETYPE.OPT_START:
@@ -38732,22 +39081,22 @@ module.exports.draw = function (text, id) {
             case sq.yy.LINETYPE.ALT_END:
                 loopData = exports.bounds.endLoop();
 
-                svgDraw.drawLoop(diagram, loopData, 'alt', conf);
+                svgDraw.drawLoop(diagram, loopData,'alt', conf);
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
                 break;
             default:
                 exports.bounds.bumpVerticalPos(conf.messageMargin);
-                startx = actors[msg.from].x + conf.width / 2;
-                stopx = actors[msg.to].x + conf.width / 2;
+                startx = actors[msg.from].x + conf.width/2;
+                stopx = actors[msg.to].x + conf.width/2;
 
                 drawMessage(diagram, startx, stopx, exports.bounds.getVerticalPos(), msg);
 
         }
     });
 
-    if (conf.mirrorActors) {
+    if(conf.mirrorActors){
         // Draw actors below diagram
-        exports.bounds.bumpVerticalPos(conf.boxMargin * 2);
+        exports.bounds.bumpVerticalPos(conf.boxMargin*2);
         module.exports.drawActors(diagram, actors, actorKeys, exports.bounds.getVerticalPos());
     }
 
@@ -38756,34 +39105,33 @@ module.exports.draw = function (text, id) {
     // Adjust line height of actor lines now that the height of the diagram is known
     log.debug('For line height fix Querying: #' + id + ' .actor-line');
     var actorLines = d3.selectAll('#' + id + ' .actor-line');
-    actorLines.attr('y2', box.stopy);
+    actorLines.attr('y2',box.stopy);
 
-    var height = box.stopy - box.starty + 2 * conf.diagramMarginY;
 
-    if (conf.mirrorActors) {
+    var height = box.stopy - box.starty + 2*conf.diagramMarginY;
+
+    if(conf.mirrorActors){
         height = height - conf.boxMargin + conf.bottomMarginAdj;
     }
 
-    var width = box.stopx - box.startx + 2 * conf.diagramMarginX;
-    if (conf.useMaxWidth) {
+    var width  = box.stopx-box.startx+2*conf.diagramMarginX;
+    if(conf.useMaxWidth) {
         diagram.attr('height', '100%');
         diagram.attr('width', '100%');
-        diagram.attr('style', 'max-width:' + width + 'px;');
-    } else {
-        diagram.attr('height', height);
-        diagram.attr('width', width);
+        diagram.attr('style', 'max-width:' + (width) + 'px;');
+    }else{
+        diagram.attr('height',height);
+        diagram.attr('width', width );
     }
-    diagram.attr('viewBox', box.startx - conf.diagramMarginX + ' -' + conf.diagramMarginY + ' ' + width + ' ' + height);
+    diagram.attr('viewBox', (box.startx-conf.diagramMarginX) + ' -' +conf.diagramMarginY + ' ' + width + ' ' + height);
 };
 
-},{"../../d3":107,"../../logger":126,"./parser/sequenceDiagram":122,"./sequenceDb":123,"./svgDraw":125}],125:[function(require,module,exports){
+},{"../../d3":107,"../../logger":127,"./parser/sequenceDiagram":122,"./sequenceDb":123,"./svgDraw":125}],125:[function(require,module,exports){
 /**
  * Created by knut on 14-12-20.
  */
 //var log = require('../../logger').create();
-'use strict';
-
-exports.drawRect = function (elem, rectData) {
+exports.drawRect = function(elem , rectData){
     var rectElem = elem.append('rect');
     rectElem.attr('x', rectData.x);
     rectElem.attr('y', rectData.y);
@@ -38794,24 +39142,24 @@ exports.drawRect = function (elem, rectData) {
     rectElem.attr('rx', rectData.rx);
     rectElem.attr('ry', rectData.ry);
 
-    if (typeof rectData['class'] !== 'undefined') {
-        rectElem.attr('class', rectData['class']);
+    if(typeof rectData.class !== 'undefined'){
+        rectElem.attr('class', rectData.class);
     }
 
     return rectElem;
 };
 
-exports.drawText = function (elem, textData, width) {
+exports.drawText = function(elem, textData, width) {
     // Remove and ignore br:s
-    var nText = textData.text.replace(/<br\/?>/ig, ' ');
+    var nText = textData.text.replace(/<br\/?>/ig,' ');
 
     var textElem = elem.append('text');
     textElem.attr('x', textData.x);
     textElem.attr('y', textData.y);
     textElem.style('text-anchor', textData.anchor);
     textElem.attr('fill', textData.fill);
-    if (typeof textData['class'] !== 'undefined') {
-        textElem.attr('class', textData['class']);
+    if (typeof textData.class !== 'undefined') {
+        textElem.attr('class', textData.class);
     }
     /*    textData.text.split(/<br\/?>/ig).forEach(function(rowText){
             var span = textElem.append('tspan');
@@ -38820,12 +39168,13 @@ exports.drawText = function (elem, textData, width) {
             span.text(rowText);
         });*/
 
+
     var span = textElem.append('tspan');
     //span.attr('x', textData.x);
-    span.attr('x', textData.x + textData.textMargin * 2);
+    span.attr('x', textData.x+textData.textMargin*2);
     //span.attr('dy', textData.dy);
     span.text(nText);
-    if (typeof textElem.textwrap !== 'undefined') {
+    if(typeof textElem.textwrap !== 'undefined'){
 
         textElem.textwrap({
             x: textData.x, // bounding box is 300 pixels from the left
@@ -38838,7 +39187,7 @@ exports.drawText = function (elem, textData, width) {
     return textElem;
 };
 
-exports.drawLabel = function (elem, txtObject) {
+exports.drawLabel = function(elem , txtObject){
     var rectData = exports.getNoteRect();
     rectData.x = txtObject.x;
     rectData.y = txtObject.y;
@@ -38846,31 +39195,39 @@ exports.drawLabel = function (elem, txtObject) {
     rectData.height = 20;
     rectData.fill = '#526e52';
     rectData.stroke = 'none';
-    rectData['class'] = 'labelBox';
+    rectData.class = 'labelBox';
     //rectData.color = 'white';
 
     exports.drawRect(elem, rectData);
 
     txtObject.y = txtObject.y + txtObject.labelMargin;
-    txtObject.x = txtObject.x + 0.5 * txtObject.labelMargin;
+    txtObject.x = txtObject.x + 0.5*txtObject.labelMargin;
     txtObject.fill = 'white';
     exports.drawText(elem, txtObject);
 
     //return textElem;
 };
-var actorCnt = -1;
+var actorCnt  = -1;
 /**
  * Draws an actor in the diagram with the attaced line
  * @param center - The center of the the actor
  * @param pos The position if the actor in the liost of actors
  * @param description The text in the box
  */
-exports.drawActor = function (elem, left, verticalPos, description, conf) {
-    var center = left + conf.width / 2;
+exports.drawActor = function(elem, left, verticalPos, description,conf){
+    var center = left + (conf.width/2);
     var g = elem.append('g');
-    if (verticalPos === 0) {
+    if(verticalPos === 0) {
         actorCnt++;
-        g.append('line').attr('id', 'actor' + actorCnt).attr('x1', center).attr('y1', 5).attr('x2', center).attr('y2', 2000).attr('class', 'actor-line').attr('stroke-width', '0.5px').attr('stroke', '#999');
+        g.append('line')
+            .attr('id', 'actor'+actorCnt)
+            .attr('x1', center)
+            .attr('y1', 5)
+            .attr('x2', center)
+            .attr('y2', 2000)
+            .attr('class', 'actor-line')
+            .attr('stroke-width', '0.5px')
+            .attr('stroke', '#999');
     }
 
     var rect = exports.getNoteRect();
@@ -38879,13 +39236,18 @@ exports.drawActor = function (elem, left, verticalPos, description, conf) {
     rect.fill = '#eaeaea';
     rect.width = conf.width;
     rect.height = conf.height;
-    rect['class'] = 'actor';
+    rect.class = 'actor';
     rect.rx = 3;
     rect.ry = 3;
     exports.drawRect(g, rect);
 
-    g.append('text') // text label for the x axis
-    .attr('x', center).attr('y', verticalPos + conf.height / 2 + 5).attr('class', 'actor').style('text-anchor', 'middle').text(description);
+    g.append('text')      // text label for the x axis
+        .attr('x', center)
+        .attr('y', verticalPos + (conf.height/2)+5)
+        .attr('class','actor')
+        .style('text-anchor', 'middle')
+        .text(description)
+    ;
 };
 
 /**
@@ -38894,39 +39256,46 @@ exports.drawActor = function (elem, left, verticalPos, description, conf) {
  * @param pos The position if the actor in the list of actors
  * @param description The text in the box
  */
-exports.drawLoop = function (elem, bounds, labelText, conf) {
+exports.drawLoop = function(elem,bounds,labelText, conf){
     var g = elem.append('g');
-    var drawLoopLine = function drawLoopLine(startx, starty, stopx, stopy) {
-        g.append('line').attr('x1', startx).attr('y1', starty).attr('x2', stopx).attr('y2', stopy).attr('stroke-width', 2).attr('stroke', '#526e52').attr('class', 'loopLine');
+    var drawLoopLine = function(startx,starty,stopx,stopy){
+        g.append('line')
+            .attr('x1', startx)
+            .attr('y1', starty)
+            .attr('x2', stopx )
+            .attr('y2', stopy )
+            .attr('stroke-width', 2)
+            .attr('stroke', '#526e52')
+            .attr('class','loopLine');
     };
-    drawLoopLine(bounds.startx, bounds.starty, bounds.stopx, bounds.starty);
-    drawLoopLine(bounds.stopx, bounds.starty, bounds.stopx, bounds.stopy);
-    drawLoopLine(bounds.startx, bounds.stopy, bounds.stopx, bounds.stopy);
-    drawLoopLine(bounds.startx, bounds.starty, bounds.startx, bounds.stopy);
-    if (typeof bounds.elsey !== 'undefined') {
-        drawLoopLine(bounds.startx, bounds.elsey, bounds.stopx, bounds.elsey);
+    drawLoopLine(bounds.startx, bounds.starty, bounds.stopx , bounds.starty);
+    drawLoopLine(bounds.stopx , bounds.starty, bounds.stopx , bounds.stopy );
+    drawLoopLine(bounds.startx, bounds.stopy , bounds.stopx , bounds.stopy );
+    drawLoopLine(bounds.startx, bounds.starty, bounds.startx, bounds.stopy );
+    if(typeof bounds.elsey !== 'undefined'){
+        drawLoopLine(bounds.startx, bounds.elsey, bounds.stopx, bounds.elsey );
     }
 
     var txt = exports.getTextObj();
     txt.text = labelText;
     txt.x = bounds.startx;
     txt.y = bounds.starty;
-    txt.labelMargin = 1.5 * conf.boxMargin;
-    txt['class'] = 'labelText';
-    txt.fill = 'white';
+    txt.labelMargin =  1.5 * conf.boxMargin;
+    txt.class =  'labelText';
+    txt.fill =  'white';
 
-    exports.drawLabel(g, txt);
+    exports.drawLabel(g,txt);
 
     txt = exports.getTextObj();
     txt.text = '[ ' + bounds.title + ' ]';
-    txt.x = bounds.startx + (bounds.stopx - bounds.startx) / 2;
+    txt.x = bounds.startx + (bounds.stopx - bounds.startx)/2;
     txt.y = bounds.starty + 1.5 * conf.boxMargin;
     txt.anchor = 'middle';
-    txt['class'] = 'loopText';
+    txt.class = 'loopText';
 
-    exports.drawText(g, txt);
+    exports.drawText(g,txt);
 
-    if (typeof bounds.elseText !== 'undefined') {
+    if(typeof bounds.elseText !== 'undefined') {
         txt.text = '[ ' + bounds.elseText + ' ]';
         txt.y = bounds.elsey + 1.5 * conf.boxMargin;
         exports.drawText(g, txt);
@@ -38936,155 +39305,81 @@ exports.drawLoop = function (elem, bounds, labelText, conf) {
 /**
  * Setup arrow head and define the marker. The result is appended to the svg.
  */
-exports.insertArrowHead = function (elem) {
-    elem.append('defs').append('marker').attr('id', 'arrowhead').attr('refX', 5).attr('refY', 2).attr('markerWidth', 6).attr('markerHeight', 4).attr('orient', 'auto').append('path').attr('d', 'M 0,0 V 4 L6,2 Z'); //this is actual shape for arrowhead
+exports.insertArrowHead = function(elem){
+    elem.append('defs').append('marker')
+        .attr('id', 'arrowhead')
+        .attr('refX', 5)
+        .attr('refY', 2)
+        .attr('markerWidth', 6)
+        .attr('markerHeight', 4)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M 0,0 V 4 L6,2 Z'); //this is actual shape for arrowhead
 };
 /**
  * Setup arrow head and define the marker. The result is appended to the svg.
  */
-exports.insertArrowCrossHead = function (elem) {
+exports.insertArrowCrossHead = function(elem){
     var defs = elem.append('defs');
-    var marker = defs.append('marker').attr('id', 'crosshead').attr('markerWidth', 15).attr('markerHeight', 8).attr('orient', 'auto').attr('refX', 16).attr('refY', 4);
+    var marker = defs.append('marker')
+        .attr('id', 'crosshead')
+        .attr('markerWidth', 15)
+        .attr('markerHeight', 8)
+        .attr('orient', 'auto')
+        .attr('refX', 16)
+        .attr('refY', 4);
 
     // The arrow
-    marker.append('path').attr('fill', 'black').attr('stroke', '#000000').style('stroke-dasharray', '0, 0').attr('stroke-width', '1px').attr('d', 'M 9,2 V 6 L16,4 Z');
+    marker.append('path')
+            .attr('fill','black')
+            .attr('stroke','#000000')
+            .style('stroke-dasharray', ('0, 0'))
+            .attr('stroke-width','1px')
+            .attr('d', 'M 9,2 V 6 L16,4 Z');
 
     // The cross
-    marker.append('path').attr('fill', 'none').attr('stroke', '#000000').style('stroke-dasharray', '0, 0').attr('stroke-width', '1px').attr('d', 'M 0,1 L 6,7 M 6,1 L 0,7'); //this is actual shape for arrowhead
+    marker.append('path')
+            .attr('fill','none')
+            .attr('stroke','#000000')
+            .style('stroke-dasharray', ('0, 0'))
+            .attr('stroke-width','1px')
+            .attr('d', 'M 0,1 L 6,7 M 6,1 L 0,7')
+        ; //this is actual shape for arrowhead
+
 };
 
-exports.getTextObj = function () {
+exports.getTextObj = function(){
     var txt = {
         x: 0,
         y: 0,
-        'fill': 'black',
+        'fill':'black',
         'text-anchor': 'start',
         style: '#666',
         width: 100,
         height: 100,
-        textMargin: 0,
+        textMargin:0,
         rx: 0,
         ry: 0
     };
     return txt;
 };
 
-exports.getNoteRect = function () {
+exports.getNoteRect = function(){
     var rect = {
-        x: 0,
-        y: 0,
-        fill: '#EDF2AE',
-        stroke: '#666',
-        width: 100,
-        anchor: 'start',
-        height: 100,
-        rx: 0,
-        ry: 0
+        x      : 0,
+        y      : 0,
+        fill   : '#EDF2AE',
+        stroke : '#666',
+        width  : 100,
+        anchor : 'start',
+        height : 100,
+        rx     : 0,
+        ry     : 0
     };
     return rect;
 };
 
 },{}],126:[function(require,module,exports){
-/**
- * #logger
- * logger = require('logger').create()
- * logger.info("blah")
- * => [2011-3-3T20:24:4.810 info (5021)] blah
- * logger.debug("boom")
- * =>
- * logger.level = Logger.levels.debug
- * logger.debug(function() { return "booom" })
- * => [2011-3-3T20:24:4.810 error (5021)] booom
- */
-
-'use strict';
-
-var LEVELS = {
-    debug: 1,
-    info: 2,
-    warn: 3,
-    error: 4,
-    fatal: 5,
-    'default': 5
-};
-
-var defaultLevel = LEVELS.error;
-
-exports.setLogLevel = function (level) {
-    defaultLevel = level;
-};
-
-function formatTime(timestamp) {
-    var hh = timestamp.getUTCHours();
-    var mm = timestamp.getUTCMinutes();
-    var ss = timestamp.getSeconds();
-    var ms = timestamp.getMilliseconds();
-    // If you were building a timestamp instead of a duration, you would uncomment the following line to get 12-hour (not 24) time
-    // if (hh > 12) {hh = hh % 12;}
-    // These lines ensure you have two-digits
-    if (hh < 10) {
-        hh = '0' + hh;
-    }
-    if (mm < 10) {
-        mm = '0' + mm;
-    }
-    if (ss < 10) {
-        ss = '0' + ss;
-    }
-    if (ms < 100) {
-        ms = '0' + ms;
-    }
-    if (ms < 10) {
-        ms = '00' + ms;
-    }
-    // This formats your string to HH:MM:SS
-    var t = hh + ':' + mm + ':' + ss + ' (' + ms + ')';
-    return t;
-}
-
-function Log(level) {
-    this.level = level;
-
-    this.log = function (str, level) {
-        var logLevel = this.level;
-        if (typeof logLevel === 'undefined') {
-            logLevel = defaultLevel;
-        }
-        if (logLevel <= level) {
-            if (typeof console !== 'undefined') {
-                //eslint-disable-line no-console
-                if (typeof console.log !== 'undefined') {
-                    //eslint-disable-line no-console
-                    return console.log('[' + formatTime(new Date()) + '] ' + str); //eslint-disable-line no-console
-                }
-            }
-        }
-    };
-
-    this.trace = function (str) {
-        this.log(str, LEVELS.trace);
-    };
-
-    this.debug = function (str) {
-        this.log(str, LEVELS.debug);
-    };
-
-    this.info = function (str) {
-        this.log(str, LEVELS.info);
-    };
-
-    this.warn = function (str) {
-        this.log(str, LEVELS.warn);
-    };
-
-    this.error = function (str) {
-        this.log(str, LEVELS.error);
-    };
-}
-
-exports.Log = Log;
-
-},{}],127:[function(require,module,exports){
 (function (global){
 /**
  * ---
@@ -39099,8 +39394,6 @@ exports.Log = Log;
  * returns a svg element for the graph. It is is then up to the user of the API to make use of the svg, either insert it
  * somewhere in the page or something completely different.
  */
-'use strict';
-
 var Logger = require('./logger');
 var log = new Logger.Log();
 
@@ -39115,7 +39408,7 @@ var dotParser = require('./diagrams/flowchart/parser/dot');
 var sequenceParser = require('./diagrams/sequenceDiagram/parser/sequenceDiagram');
 var sequenceDb = require('./diagrams/sequenceDiagram/sequenceDb');
 var infoDb = require('./diagrams/example/exampleDb');
-var gantt = require('./diagrams/gantt/ganttRenderer');
+var gantt       = require('./diagrams/gantt/ganttRenderer');
 var ganttParser = require('./diagrams/gantt/parser/gantt');
 var ganttDb = require('./diagrams/gantt/ganttDb');
 var classParser = require('./diagrams/classDiagram/parser/classDiagram');
@@ -39164,115 +39457,115 @@ var config = {
      * ### flowchart
      * *The object containing configurations specific for flowcharts*
      */
-    flowchart: {
+    flowchart:{
         /**
          * **htmlLabels** - Flag for setting whether or not a html tag should be used for rendering labels
          * on the edges
          */
-        htmlLabels: true,
+        htmlLabels:true,
         /**
          * **useMaxWidth** - Flag for setting whether or not a all available width should be used for
          * the diagram.
          */
-        useMaxWidth: true
+        useMaxWidth:true
     },
 
     /**
      * ###  sequenceDiagram
      * The object containing configurations specific for sequence diagrams
      */
-    sequenceDiagram: {
+    sequenceDiagram:{
 
         /**
          * **diagramMarginX** - margin to the right and left of the sequence diagram
          */
-        diagramMarginX: 50,
+        diagramMarginX:50,
 
         /**
          * **diagramMarginY** - margin to the over and under the sequence diagram
          */
-        diagramMarginY: 10,
+        diagramMarginY:10,
+
+    /**
+     * **actorMargin** - Margin between actors
+     */
+        actorMargin:50,
+
+    /**
+     * **width** - Width of actor boxes
+     */
+        width:150,
+
+    /**
+     * **height** - Height of actor boxes
+     */
+        height:65,
+
+    /**
+     * **boxMargin** - Margin around loop boxes
+     */
+        boxMargin:10,
+
+     /**
+      * **boxTextMargin** - margin around the text in loop/alt/opt boxes
+      */
+        boxTextMargin:5,
+
+     /**
+     * **noteMargin** - margin around notes
+      */
+        noteMargin:10,
 
         /**
-         * **actorMargin** - Margin between actors
+     * **messageMargin** - Space between messages
          */
-        actorMargin: 50,
+        messageMargin:35,
 
-        /**
-         * **width** - Width of actor boxes
-         */
-        width: 150,
+    /**
+     * **mirrorActors** - mirror actors under diagram
+     */
+        mirrorActors:true,
 
-        /**
-         * **height** - Height of actor boxes
-         */
-        height: 65,
+    /**
+     * **bottomMarginAdj** - Depending on css styling this might need adjustment.
+     * Prolongs the edge of the diagram downwards
+     */
+        bottomMarginAdj:1,
 
-        /**
-         * **boxMargin** - Margin around loop boxes
-         */
-        boxMargin: 10,
-
-        /**
-         * **boxTextMargin** - margin around the text in loop/alt/opt boxes
-         */
-        boxTextMargin: 5,
-
-        /**
-        * **noteMargin** - margin around notes
-         */
-        noteMargin: 10,
-
-        /**
-        * **messageMargin** - Space between messages
-         */
-        messageMargin: 35,
-
-        /**
-         * **mirrorActors** - mirror actors under diagram
-         */
-        mirrorActors: true,
-
-        /**
-         * **bottomMarginAdj** - Depending on css styling this might need adjustment.
-         * Prolongs the edge of the diagram downwards
-         */
-        bottomMarginAdj: 1,
-
-        /**
-         * **useMaxWidth** - when this flag is set the height and width is set to 100% and is then scaling with the
-         * available space if not the absolute space required is used
-         */
-        useMaxWidth: true
+    /**
+     * **useMaxWidth** - when this flag is set the height and width is set to 100% and is then scaling with the
+     * available space if not the absolute space required is used
+     */
+        useMaxWidth:true
     },
 
     /** ### gantt
      * The object containing configurations specific for gantt diagrams*
-     */
-    gantt: {
+     */ 
+    gantt:{
         /**
          * **titleTopMargin** - margin top for the text over the gantt diagram
-         */
+         */ 
         titleTopMargin: 25,
 
         /** 
          * **barHeight** - the height of the bars in the graph
-         */
+         */ 
         barHeight: 20,
 
         /** 
          * **barGap** - the margin between the different activities in the gantt diagram
-         */
+         */ 
         barGap: 4,
 
         /** 
          *  **topPadding** - margin between title and gantt diagram and between axis and gantt diagram.
-         */
+         */  
         topPadding: 50,
 
         /** 
          *  **sidePadding** - the space allocated for the section name to the left of the activities.
-         */
+         */  
         sidePadding: 75,
 
         /** 
@@ -39293,39 +39586,41 @@ var config = {
         /** 
          * **numberSectionStyles** - the number of alternating section styles
          */
-        numberSectionStyles: 3,
+        numberSectionStyles:3,
 
         /** 
          * **axisFormatter** - formatting of the axis, this might need adjustment to match your locale and preferences
-         */
+         */  
         axisFormatter: [
 
-        // Within a day
-        ['%I:%M', function (d) {
-            return d.getHours();
-        }],
-        // Monday a week
-        ['w. %U', function (d) {
-            return d.getDay() == 1;
-        }],
-        // Day within a week (not monday)
-        ['%a %d', function (d) {
-            return d.getDay() && d.getDate() != 1;
-        }],
-        // within a month
-        ['%b %d', function (d) {
-            return d.getDate() != 1;
-        }],
-        // Month
-        ['%m-%y', function (d) {
-            return d.getMonth();
-        }]]
+            // Within a day
+            ['%I:%M', function (d) {
+                return d.getHours();
+            }],
+            // Monday a week
+            ['w. %U', function (d) {
+                return d.getDay() == 1;
+            }],
+            // Day within a week (not monday)
+            ['%a %d', function (d) {
+                return d.getDay() && d.getDate() != 1;
+            }],
+            // within a month
+            ['%b %d', function (d) {
+                return d.getDate() != 1;
+            }],
+            // Month
+            ['%m-%y', function (d) {
+                return d.getMonth();
+            }]
+        ]
     },
-    classDiagram: {},
-    info: {}
+    classDiagram:{},
+    info:{}
 };
 
 Logger.setLogLevel(config.logLevel);
+
 
 /**
  * ## parse
@@ -39333,11 +39628,11 @@ Logger.setLogLevel(config.logLevel);
  * thrown and
  * @param text
  */
-var parse = function parse(text) {
+var parse = function(text){
     var graphType = utils.detectType(text);
     var parser;
 
-    switch (graphType) {
+    switch(graphType){
         case 'graph':
             parser = flowParser;
             parser.parser.yy = graph;
@@ -39364,10 +39659,11 @@ var parse = function parse(text) {
             break;
     }
 
-    try {
+    try{
         parser.parse(text);
         return true;
-    } catch (err) {
+    }
+    catch(err){
         return false;
     }
 };
@@ -39378,48 +39674,51 @@ exports.parse = parse;
  * Function returning version information
  * @returns {string} A string containing the version info
  */
-exports.version = function () {
+exports.version = function(){
     return require('../package.json').version;
 };
 
-exports.encodeEntities = function (text) {
+exports.encodeEntities = function(text){
     var txt = text;
 
-    txt = txt.replace(/style.*:\S*#.*;/g, function (s) {
-        var innerTxt = s.substring(0, s.length - 1);
+    txt = txt.replace(/style.*:\S*#.*;/g,function(s){
+        var innerTxt = s.substring(0,s.length-1);
         return innerTxt;
     });
-    txt = txt.replace(/classDef.*:\S*#.*;/g, function (s) {
-        var innerTxt = s.substring(0, s.length - 1);
+    txt = txt.replace(/classDef.*:\S*#.*;/g,function(s){
+        var innerTxt = s.substring(0,s.length-1);
         return innerTxt;
     });
 
-    txt = txt.replace(/#\w+\;/g, function (s) {
-        var innerTxt = s.substring(1, s.length - 1);
+    txt = txt.replace(/#\w+\;/g,function(s){
+        var innerTxt = s.substring(1,s.length-1);
 
         var isInt = /^\+?\d+$/.test(innerTxt);
-        if (isInt) {
-            return 'ﬂ°°' + innerTxt + '¶ß';
-        } else {
-            return 'ﬂ°' + innerTxt + '¶ß';
+        if(isInt){
+            return 'ﬂ°°'+innerTxt+'¶ß';
+        }else{
+            return 'ﬂ°'+innerTxt+'¶ß';
         }
+
     });
 
     return txt;
 };
 
-exports.decodeEntities = function (text) {
+exports.decodeEntities = function(text){
     var txt = text;
 
-    txt = txt.replace(/\ﬂ\°\°/g, function () {
+    txt = txt.replace(/\ﬂ\°\°/g,function(){
         return '&#';
     });
-    txt = txt.replace(/\ﬂ\°/g, function () {
+    txt = txt.replace(/\ﬂ\°/g,function(){
         return '&';
     });
-    txt = txt.replace(/¶ß/g, function () {
+    txt = txt.replace(/¶ß/g,function(){
         return ';';
     });
+
+
 
     return txt;
 };
@@ -39446,12 +39745,25 @@ exports.decodeEntities = function (text) {
  * provided a hidden div will be inserted in the body of the page instead. The element will be removed when rendering is
  * completed.
  */
-var render = function render(id, txt, cb, container) {
+var render = function(id, txt, cb, container){
 
-    if (typeof container !== 'undefined') {
-        d3.select(container).append('div').attr('id', 'd' + id).append('svg').attr('id', id).attr('width', '100%').attr('xmlns', 'http://www.w3.org/2000/svg').append('g');
-    } else {
-        d3.select('body').append('div').attr('id', 'd' + id).append('svg').attr('id', id).attr('width', '100%').attr('xmlns', 'http://www.w3.org/2000/svg').append('g');
+    if(typeof container !== 'undefined'){
+        d3.select(container).append('div')
+            .attr('id', 'd'+id)
+            .append('svg')
+            .attr('id', id)
+            .attr('width','100%')
+            .attr('xmlns','http://www.w3.org/2000/svg')
+            .append('g');
+    }
+    else{
+        d3.select('body').append('div')
+            .attr('id', 'd'+id)
+            .append('svg')
+            .attr('id', id)
+            .attr('width','100%')
+            .attr('xmlns','http://www.w3.org/2000/svg')
+            .append('g');
     }
 
     window.txt = txt;
@@ -39459,15 +39771,15 @@ var render = function render(id, txt, cb, container) {
     //console.warn('mermaid encode: ');
     //console.warn(txt);
 
-    var element = d3.select('#d' + id).node();
+    var element = d3.select('#d'+id).node();
     var graphType = utils.detectType(txt);
     var classes = {};
-    switch (graphType) {
+    switch(graphType){
         case 'graph':
             config.flowchart.arrowMarkerAbsolute = config.arrowMarkerAbsolute;
             flowRenderer.setConf(config.flowchart);
             flowRenderer.draw(txt, id, false);
-            if (config.cloneCssStyles) {
+            if(config.cloneCssStyles){
                 classes = flowRenderer.getClasses(txt, false);
                 utils.cloneCssStyles(element.firstChild, classes);
             }
@@ -39476,7 +39788,7 @@ var render = function render(id, txt, cb, container) {
             config.flowchart.arrowMarkerAbsolute = config.arrowMarkerAbsolute;
             flowRenderer.setConf(config.flowchart);
             flowRenderer.draw(txt, id, true);
-            if (config.cloneCssStyles) {
+            if(config.cloneCssStyles) {
                 classes = flowRenderer.getClasses(txt, true);
                 utils.cloneCssStyles(element.firstChild, classes);
             }
@@ -39484,47 +39796,47 @@ var render = function render(id, txt, cb, container) {
         case 'sequenceDiagram':
             config.sequenceDiagram.arrowMarkerAbsolute = config.arrowMarkerAbsolute;
             seq.setConf(config.sequenceDiagram);
-            seq.draw(txt, id);
-            if (config.cloneCssStyles) {
+            seq.draw(txt,id);
+            if(config.cloneCssStyles) {
                 utils.cloneCssStyles(element.firstChild, []);
             }
             break;
         case 'gantt':
             config.gantt.arrowMarkerAbsolute = config.arrowMarkerAbsolute;
             gantt.setConf(config.gantt);
-            gantt.draw(txt, id);
-            if (config.cloneCssStyles) {
+            gantt.draw(txt,id);
+            if(config.cloneCssStyles) {
                 utils.cloneCssStyles(element.firstChild, []);
             }
             break;
         case 'classDiagram':
             config.classDiagram.arrowMarkerAbsolute = config.arrowMarkerAbsolute;
             classRenderer.setConf(config.classDiagram);
-            classRenderer.draw(txt, id);
-            if (config.cloneCssStyles) {
+            classRenderer.draw(txt,id);
+            if(config.cloneCssStyles) {
                 utils.cloneCssStyles(element.firstChild, []);
             }
             break;
         case 'info':
             config.info.arrowMarkerAbsolute = config.arrowMarkerAbsolute;
-            info.draw(txt, id, exports.version());
-            if (config.cloneCssStyles) {
+            info.draw(txt,id,exports.version());
+            if(config.cloneCssStyles) {
                 utils.cloneCssStyles(element.firstChild, []);
             }
             break;
     }
 
-    d3.select('#d' + id).selectAll('foreignobject div').attr('xmlns', 'http://www.w3.org/1999/xhtml');
+    d3.select('#d'+id).selectAll('foreignobject div').attr('xmlns','http://www.w3.org/1999/xhtml');
 
-    var url = '';
-    if (config.arrowMarkerAbsolute) {
-        url = window.location.protocol + '//' + window.location.host + window.location.pathname + window.location.search;
-        url = url.replace(/\(/g, '\\(');
-        url = url.replace(/\)/g, '\\)');
+    var url =  '';
+    if(config.arrowMarkerAbsolute){
+        url =  window.location.protocol+'//'+window.location.host+window.location.pathname +window.location.search;
+        url = url.replace(/\(/g,'\\(');
+        url = url.replace(/\)/g,'\\)');
     }
 
     // Fix for when the base tag is used
-    var svgCode = d3.select('#d' + id).node().innerHTML.replace(/url\(#arrowhead/g, 'url(' + url + '#arrowhead', 'g');
+    var svgCode = d3.select('#d'+id).node().innerHTML.replace(/url\(#arrowhead/g,'url('+url +'#arrowhead','g');
 
     svgCode = exports.decodeEntities(svgCode);
 
@@ -39532,98 +39844,196 @@ var render = function render(id, txt, cb, container) {
     //console.warn(svgCode);
     //var he = require('he');
     //svgCode = he.decode(svgCode);
-    if (typeof cb !== 'undefined') {
-        cb(svgCode, graph.bindFunctions);
-    } else {
+    if(typeof cb !== 'undefined'){
+        cb(svgCode,graph.bindFunctions);
+    }else{
         log.warn('CB = undefined!');
     }
 
-    var node = d3.select('#d' + id).node();
-    if (node !== null && typeof node.remove === 'function') {
-        d3.select('#d' + id).node().remove();
+    var node = d3.select('#d'+id).node();
+    if(node !== null && typeof node.remove === 'function'){
+        d3.select('#d'+id).node().remove();
     }
 
     return svgCode;
 };
 
 exports.render = function (id, text, cb, containerElement) {
-    try {
-        if (arguments.length === 1) {
+    try{
+        if(arguments.length === 1){
             text = id;
             id = 'mermaidId0';
         }
 
         if (typeof document === 'undefined') {
             // Todo handle rendering serverside using phantomjs
-        } else {
-                // In browser
-                return render(id, text, cb, containerElement);
-            }
-    } catch (e) {
+        }
+        else {
+            // In browser
+            return render(id, text, cb, containerElement);
+        }
+
+    }catch(e){
         log.warn(e);
     }
 };
 
-var setConf = function setConf(cnf) {
+
+var setConf = function(cnf){
     // Top level initially mermaid, gflow, sequenceDiagram and gantt
     var lvl1Keys = Object.keys(cnf);
     var i;
-    for (i = 0; i < lvl1Keys.length; i++) {
+    for(i=0;i<lvl1Keys.length;i++){
 
-        if (typeof cnf[lvl1Keys[i]] === 'object') {
+        if(typeof cnf[lvl1Keys[i]] === 'object' ){
             var lvl2Keys = Object.keys(cnf[lvl1Keys[i]]);
 
             var j;
-            for (j = 0; j < lvl2Keys.length; j++) {
-                log.debug('Setting conf ', lvl1Keys[i], '-', lvl2Keys[j]);
-                if (typeof config[lvl1Keys[i]] === 'undefined') {
-
+            for(j=0;j<lvl2Keys.length;j++) {
+                log.debug('Setting conf ',lvl1Keys[i],'-',lvl2Keys[j]);
+                if(typeof config[lvl1Keys[i]] === 'undefined'){
+                    
                     config[lvl1Keys[i]] = {};
                 }
-                log.debug('Setting config: ' + lvl1Keys[i] + ' ' + lvl2Keys[j] + ' to ' + cnf[lvl1Keys[i]][lvl2Keys[j]]);
+                log.debug('Setting config: '+lvl1Keys[i]+' '+lvl2Keys[j]+' to '+cnf[lvl1Keys[i]][lvl2Keys[j]]);
                 config[lvl1Keys[i]][lvl2Keys[j]] = cnf[lvl1Keys[i]][lvl2Keys[j]];
             }
-        } else {
+        }else{
             config[lvl1Keys[i]] = cnf[lvl1Keys[i]];
         }
     }
 };
-exports.initialize = function (options) {
+exports.initialize = function(options){
     log.debug('Initializing mermaidAPI');
     // Update default config with options supplied at initialization
-    if (typeof options === 'object') {
+    if(typeof options === 'object'){
         setConf(options);
     }
     Logger.setLogLevel(config.logLevel);
+
 };
-exports.getConfig = function () {
+exports.getConfig = function(){
     return config;
 };
 
-exports.parseError = function (err, hash) {
-    if (typeof mermaid !== 'undefined') {
-        global.mermaid.parseError(err, hash);
-    } else {
+exports.parseError = function(err, hash) {
+    if(typeof mermaid !== 'undefined') {
+        global.mermaid.parseError(err,hash);
+    }else{
         log.debug('Mermaid Syntax error:');
         log.debug(err);
     }
 };
 global.mermaidAPI = {
-    render: exports.render,
-    parse: exports.parse,
-    initialize: exports.initialize,
-    detectType: utils.detectType,
-    parseError: exports.parseError,
-    getConfig: exports.getConfig
+    render     : exports.render,
+    parse      : exports.parse,
+    initialize : exports.initialize,
+    detectType : utils.detectType,
+    parseError : exports.parseError,
+    getConfig  : exports.getConfig
 };
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../package.json":106,"./d3":107,"./diagrams/classDiagram/classDb":108,"./diagrams/classDiagram/classRenderer":109,"./diagrams/classDiagram/parser/classDiagram":110,"./diagrams/example/exampleDb":111,"./diagrams/example/exampleRenderer":112,"./diagrams/example/parser/example":113,"./diagrams/flowchart/flowRenderer":115,"./diagrams/flowchart/graphDb":116,"./diagrams/flowchart/parser/dot":117,"./diagrams/flowchart/parser/flow":118,"./diagrams/gantt/ganttDb":119,"./diagrams/gantt/ganttRenderer":120,"./diagrams/gantt/parser/gantt":121,"./diagrams/sequenceDiagram/parser/sequenceDiagram":122,"./diagrams/sequenceDiagram/sequenceDb":123,"./diagrams/sequenceDiagram/sequenceRenderer":124,"./logger":126,"./utils":128}],128:[function(require,module,exports){
+}).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../package.json":106,"./d3":107,"./diagrams/classDiagram/classDb":108,"./diagrams/classDiagram/classRenderer":109,"./diagrams/classDiagram/parser/classDiagram":110,"./diagrams/example/exampleDb":111,"./diagrams/example/exampleRenderer":112,"./diagrams/example/parser/example":113,"./diagrams/flowchart/flowRenderer":115,"./diagrams/flowchart/graphDb":116,"./diagrams/flowchart/parser/dot":117,"./diagrams/flowchart/parser/flow":118,"./diagrams/gantt/ganttDb":119,"./diagrams/gantt/ganttRenderer":120,"./diagrams/gantt/parser/gantt":121,"./diagrams/sequenceDiagram/parser/sequenceDiagram":122,"./diagrams/sequenceDiagram/sequenceDb":123,"./diagrams/sequenceDiagram/sequenceRenderer":124,"./logger":127,"./utils":128}],127:[function(require,module,exports){
+/**
+ * #logger
+ * logger = require('logger').create()
+ * logger.info("blah")
+ * => [2011-3-3T20:24:4.810 info (5021)] blah
+ * logger.debug("boom")
+ * =>
+ * logger.level = Logger.levels.debug
+ * logger.debug(function() { return "booom" })
+ * => [2011-3-3T20:24:4.810 error (5021)] booom
+ */
+
+const LEVELS = {
+    debug: 1,
+    info: 2,
+    warn: 3,
+    error: 4,
+    fatal: 5,
+    default: 5
+};
+
+var defaultLevel = LEVELS.error;
+
+exports.setLogLevel = function (level) {
+    defaultLevel = level;
+};
+
+function formatTime(timestamp) {
+    var hh = timestamp.getUTCHours();
+    var mm = timestamp.getUTCMinutes();
+    var ss = timestamp.getSeconds();
+    var ms = timestamp.getMilliseconds();
+    // If you were building a timestamp instead of a duration, you would uncomment the following line to get 12-hour (not 24) time
+    // if (hh > 12) {hh = hh % 12;}
+    // These lines ensure you have two-digits
+    if (hh < 10) {
+        hh = '0' + hh;
+    }
+    if (mm < 10) {
+        mm = '0' + mm;
+    }
+    if (ss < 10) {
+        ss = '0' + ss;
+    }
+    if (ms < 100) {
+        ms = '0' + ms;
+    }
+    if (ms < 10) {
+        ms = '00' + ms;
+    }
+    // This formats your string to HH:MM:SS
+    var t = hh + ':' + mm + ':' + ss + ' (' + ms + ')';
+    return t;
+}
+
+
+function Log(level) {
+    this.level = level;
+
+    this.log = function(str, level) {
+        var logLevel = this.level;
+        if(typeof logLevel === 'undefined'){
+            logLevel = defaultLevel;
+        }
+        if (logLevel <= level) {
+            if (typeof console !== 'undefined') { //eslint-disable-line no-console
+                if (typeof console.log !== 'undefined') { //eslint-disable-line no-console
+                    return console.log('[' + formatTime(new Date()) + '] ' + str); //eslint-disable-line no-console
+                }
+            }
+        }
+    };
+
+    this.trace = function(str) {
+        this.log(str, LEVELS.trace);
+    };
+
+    this.debug = function(str) {
+        this.log(str, LEVELS.debug);
+    };
+
+    this.info = function(str) {
+        this.log(str, LEVELS.info);
+    };
+
+    this.warn = function(str) {
+        this.log(str, LEVELS.warn);
+    };
+
+    this.error = function(str) {
+        this.log(str, LEVELS.error);
+    };
+}
+
+exports.Log = Log;
+},{}],128:[function(require,module,exports){
 /**
  * Created by knut on 14-11-23.
  */
-'use strict';
-
 var Logger = require('./logger');
 var log = new Logger.Log();
 
@@ -39644,35 +40054,35 @@ var log = new Logger.Log();
  * @param {string} text The text defining the graph
  * @returns {string} A graph definition key
  */
-var detectType = function detectType(text) {
-    text = text.replace(/^\s*%%.*\n/g, '\n');
-    if (text.match(/^\s*sequenceDiagram/)) {
+var detectType = function(text){
+    text = text.replace(/^\s*%%.*\n/g,'\n');
+    if(text.match(/^\s*sequenceDiagram/)){
         return 'sequenceDiagram';
     }
 
-    if (text.match(/^\s*digraph/)) {
+    if(text.match(/^\s*digraph/)) {
         //log.debug('Detected dot syntax');
         return 'dotGraph';
     }
 
-    if (text.match(/^\s*info/)) {
+    if(text.match(/^\s*info/)) {
         //log.debug('Detected info syntax');
         return 'info';
     }
 
-    if (text.match(/^\s*gantt/)) {
+    if(text.match(/^\s*gantt/)) {
         //log.debug('Detected info syntax');
         return 'gantt';
     }
 
-    if (text.match(/^\s*classDiagram/)) {
+    if(text.match(/^\s*classDiagram/)) {
         log.debug('Detected classDiagram syntax');
         return 'classDiagram';
     }
 
     return 'graph';
 };
-exports.detectType = detectType;
+exports.detectType= detectType;
 
 /**
  * Copies all relevant CSS content into the graph SVG.
@@ -39680,7 +40090,7 @@ exports.detectType = detectType;
  * @param {element} svg The root element of the SVG
  * @param {object} Hash table of class definitions from the graph definition
  */
-var cloneCssStyles = function cloneCssStyles(svg, classes) {
+var cloneCssStyles = function(svg, classes){
     var usedStyles = '';
     var sheets = document.styleSheets;
     var rule;
@@ -39693,7 +40103,7 @@ var cloneCssStyles = function cloneCssStyles(svg, classes) {
                 if (rules !== null) {
                     for (var j = 0; j < rules.length; j++) {
                         rule = rules[j];
-                        if (typeof rule.style !== 'undefined') {
+                        if (typeof(rule.style) !== 'undefined') {
                             var elems;
                             elems = svg.querySelectorAll(rule.selectorText);
                             if (elems.length > 0) {
@@ -39702,30 +40112,31 @@ var cloneCssStyles = function cloneCssStyles(svg, classes) {
                         }
                     }
                 }
-            } catch (err) {
-                if (typeof rule !== 'undefined') {
+            }
+            catch (err) {
+                if (typeof(rule) !== 'undefined') {
                     log.warn('Invalid CSS selector "' + rule.selectorText + '"', err);
                 }
             }
-        }
+        } 
     }
 
     var defaultStyles = '';
     var embeddedStyles = '';
 
     for (var className in classes) {
-        if (classes.hasOwnProperty(className) && typeof className != 'undefined') {
+        if (classes.hasOwnProperty(className) && typeof(className) != 'undefined') {
             if (className === 'default') {
-                if (classes['default'].styles instanceof Array) {
+                if (classes.default.styles instanceof Array) {
                     defaultStyles += '#' + svg.id.trim() + ' .node' + '>rect { ' + classes[className].styles.join('; ') + '; }\n';
                 }
-                if (classes['default'].nodeLabelStyles instanceof Array) {
+                if (classes.default.nodeLabelStyles instanceof Array) {
                     defaultStyles += '#' + svg.id.trim() + ' .node text ' + ' { ' + classes[className].nodeLabelStyles.join('; ') + '; }\n';
                 }
-                if (classes['default'].edgeLabelStyles instanceof Array) {
+                if (classes.default.edgeLabelStyles instanceof Array) {
                     defaultStyles += '#' + svg.id.trim() + ' .edgeLabel text ' + ' { ' + classes[className].edgeLabelStyles.join('; ') + '; }\n';
                 }
-                if (classes['default'].clusterStyles instanceof Array) {
+                if (classes.default.clusterStyles instanceof Array) {
                     defaultStyles += '#' + svg.id.trim() + ' .cluster rect ' + ' { ' + classes[className].clusterStyles.join('; ') + '; }\n';
                 }
             } else {
@@ -39758,5 +40169,4 @@ var cloneCssStyles = function cloneCssStyles(svg, classes) {
 
 exports.cloneCssStyles = cloneCssStyles;
 
-},{"./logger":126}]},{},[127])(127)
-});
+},{"./logger":127}]},{},[126])

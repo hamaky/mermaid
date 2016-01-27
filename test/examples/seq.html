@@ -103,18 +103,12 @@
     <h1>Bounding test & async message to self</h1>
     <div class="mermaid">
         sequenceDiagram
-        participant Alice
+        participant Islam
         participant Bob
         participant John the Long
         Alice->Bob: Hello Bob, how are you?
-        loop Outer loop
-        Note left of Alice: Bob thinks about <br/> things <br/> to think about
-        Bob-xBob: I am good thanks!
-        loop Inner loop
-        Bob->>John the Long: How about you John?
-        Note right of John the Long: Bob thinks a long<br/>long time, so long<br/>that the text does<br/>not fit.
-        end
-        end
+
+        activate Bob deactivate
 
         Bob-->>Alice: Checking with John...
         Alice->>John the Long: Yes... John, how are you?
