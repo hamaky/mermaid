@@ -107,7 +107,9 @@ exports.bounds = {
         return loop;
     },
     newActivate:function(actor){
-        this.actlist.push({startx:actor.x+conf.actorMargin,starty:this.verticalPos,stopx:actor.x+conf.actorMargin,stopy:undefined, title:''});
+        var actorCenter = actor.x + (conf.width/2);
+
+        this.actlist.push({startx:actorCenter,starty:this.verticalPos,stopx:actorCenter,stopy:undefined, actor:actor});
     },
     endActivate:function(){
         var loop = this.actlist.pop();
@@ -204,8 +206,8 @@ var drawMessage = function(elem, startx, stopx, verticalPos, msg){
     }
     else{
         //textWidth = getBBox(textElem).width; //.getComputedTextLength()
-        textWidth = textElem[0][0].getBoundingClientRect();  
-        //textWidth = textElem[0][0].getComputedTextLength();  
+        textWidth = textElem[0][0].getBoundingClientRect();
+        //textWidth = textElem[0][0].getComputedTextLength();
     }
 
     var line;
@@ -357,8 +359,8 @@ module.exports.draw = function (text, id) {
                 exports.bounds.bumpVerticalPos(conf.boxMargin + conf.boxTextMargin);
                 break;
             case sq.yy.LINETYPE.ACT_END:
-                loopData = exports.bounds.endActivate();
-                svgDraw.drawLoop(diagram, loopData,'', conf);
+                activateData = exports.bounds.endActivate();
+                svgDraw.drawActivate(diagram, activateData, conf);
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
                 break;
             case sq.yy.LINETYPE.OPT_START:

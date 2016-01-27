@@ -174,6 +174,28 @@ exports.drawLoop = function(elem,bounds,labelText, conf){
 };
 
 /**
+ * Draws an actor activate in the diagram with the attaced line
+ * @param center - The center of the the actor
+ * @param pos The position if the actor in the list of actors
+ * @param description The text in the box
+ */
+exports.drawActivate = function(elem,bounds,conf){
+    var g = elem.append('g');
+    
+    var rectData = exports.getNoteRect();
+    rectData.x = bounds.startx-5;
+    rectData.y = bounds.starty;
+    rectData.width = 10;
+    rectData.height = bounds.stopy-bounds.starty-5;
+    rectData.fill = '#526e52';
+    rectData.stroke = 'none';
+    rectData.class = 'labelBox';
+    //rectData.color = 'white';
+
+    exports.drawRect(elem, rectData);
+};
+
+/**
  * Setup arrow head and define the marker. The result is appended to the svg.
  */
 exports.insertArrowHead = function(elem){
