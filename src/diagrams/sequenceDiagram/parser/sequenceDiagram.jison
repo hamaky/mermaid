@@ -30,8 +30,6 @@
 <ID>[^\->:\n,;]+?(?=((?!\n)\s)+"as"(?!\n)\s|[#\n;]|$)  { this.begin('ALIAS'); return 'ACTOR'; }
 <ALIAS>"as"       { this.popState(); this.popState(); this.begin('LINE'); return 'AS'; }
 <ALIAS>(?:)       { this.popState(); this.popState(); return 'NL'; }
-"activate"        { this.begin('LINE'); return 'activate'; }
-"deactivate"      { this.begin('LINE'); return 'deactivate'; }
 "loop"            { this.begin('LINE'); return 'loop'; }
 "opt"             { this.begin('LINE'); return 'opt'; }
 "alt"             { this.begin('LINE'); return 'alt'; }
@@ -42,6 +40,8 @@
 "right of"        return 'right_of';
 "over"            return 'over';
 "note"            return 'note';
+"activate"        return 'activate';
+"deactivate"      return 'deactivate';
 "title"           return 'title';
 "sequenceDiagram" return 'SD';
 ","               return ',';
@@ -111,11 +111,10 @@ statement
 		$$=$3;}
     | activate actor document deactivate
 	{
-		$3.unshift({type: 'activateStart', actor:$2, signalType: yy.LINETYPE.ACT_START});
-		$3.push({type: 'activateEnd', actor:$2, signalType: yy.LINETYPE.ACT_END});
+		$3.unshift({type: 'activateStart', actor:$2.actor, signalType: yy.LINETYPE.ACT_START});
+		$3.push({type: 'activateEnd', actor:$2.actor, signalType: yy.LINETYPE.ACT_END});
 		$$=$3;
-    }
-    ;
+    };
 
 note_statement
 	: 'note' placement actor text2
