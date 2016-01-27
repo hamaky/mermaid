@@ -132,8 +132,8 @@ case 14:
 break;
 case 15:
 
-		$$[$0-1].unshift({type: 'activateStart', actor:$$[$0-2], signalType: yy.LINETYPE.ACT_START});
-		$$[$0-1].push({type: 'activateEnd', actor:$$[$0-2], signalType: yy.LINETYPE.ACT_END});
+		$$[$0-1].unshift({type: 'activateStart', actor:$$[$0-2].actor, signalType: yy.LINETYPE.ACT_START});
+		$$[$0-1].push({type: 'activateEnd', actor:$$[$0-2].actor, signalType: yy.LINETYPE.ACT_END});
 		this.$=$$[$0-1];
     
 break;
@@ -689,29 +689,29 @@ case 7: this.popState(); this.popState(); this.begin('LINE'); return 12;
 break;
 case 8: this.popState(); this.popState(); return 9; 
 break;
-case 9: this.begin('LINE'); return 23; 
+case 9: this.begin('LINE'); return 18; 
 break;
-case 10: this.begin('LINE'); return 24; 
+case 10: this.begin('LINE'); return 20; 
 break;
-case 11: this.begin('LINE'); return 18; 
+case 11: this.begin('LINE'); return 21; 
 break;
-case 12: this.begin('LINE'); return 20; 
+case 12: this.begin('LINE'); return 22; 
 break;
-case 13: this.begin('LINE'); return 21; 
+case 13: this.popState(); return 13; 
 break;
-case 14: this.begin('LINE'); return 22; 
+case 14:return 19;
 break;
-case 15: this.popState(); return 13; 
+case 15:return 32;
 break;
-case 16:return 19;
+case 16:return 33;
 break;
-case 17:return 32;
+case 17:return 28;
 break;
-case 18:return 33;
+case 18:return 25;
 break;
-case 19:return 28;
+case 19:return 23;
 break;
-case 20:return 25;
+case 20:return 24;
 break;
 case 21:return 16;
 break;
@@ -743,8 +743,8 @@ case 34:return 'INVALID';
 break;
 }
 },
-rules: [/^(?:[\n]+)/i,/^(?:\s+)/i,/^(?:((?!\n)\s)+)/i,/^(?:#[^\n]*)/i,/^(?:%[^\n]*)/i,/^(?:participant\b)/i,/^(?:[^\->:\n,;]+?(?=((?!\n)\s)+as(?!\n)\s|[#\n;]|$))/i,/^(?:as\b)/i,/^(?:(?:))/i,/^(?:activate\b)/i,/^(?:deactivate\b)/i,/^(?:loop\b)/i,/^(?:opt\b)/i,/^(?:alt\b)/i,/^(?:else\b)/i,/^(?:[^#\n;]*)/i,/^(?:end\b)/i,/^(?:left of\b)/i,/^(?:right of\b)/i,/^(?:over\b)/i,/^(?:note\b)/i,/^(?:title\b)/i,/^(?:sequenceDiagram\b)/i,/^(?:,)/i,/^(?:;)/i,/^(?:[^\->:\n,;]+)/i,/^(?:->>)/i,/^(?:-->>)/i,/^(?:->)/i,/^(?:-->)/i,/^(?:-[x])/i,/^(?:--[x])/i,/^(?::[^#\n;]+)/i,/^(?:$)/i,/^(?:.)/i],
-conditions: {"LINE":{"rules":[2,3,15],"inclusive":false},"ALIAS":{"rules":[2,3,7,8],"inclusive":false},"ID":{"rules":[2,3,6],"inclusive":false},"INITIAL":{"rules":[0,1,3,4,5,9,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34],"inclusive":true}}
+rules: [/^(?:[\n]+)/i,/^(?:\s+)/i,/^(?:((?!\n)\s)+)/i,/^(?:#[^\n]*)/i,/^(?:%[^\n]*)/i,/^(?:participant\b)/i,/^(?:[^\->:\n,;]+?(?=((?!\n)\s)+as(?!\n)\s|[#\n;]|$))/i,/^(?:as\b)/i,/^(?:(?:))/i,/^(?:loop\b)/i,/^(?:opt\b)/i,/^(?:alt\b)/i,/^(?:else\b)/i,/^(?:[^#\n;]*)/i,/^(?:end\b)/i,/^(?:left of\b)/i,/^(?:right of\b)/i,/^(?:over\b)/i,/^(?:note\b)/i,/^(?:activate\b)/i,/^(?:deactivate\b)/i,/^(?:title\b)/i,/^(?:sequenceDiagram\b)/i,/^(?:,)/i,/^(?:;)/i,/^(?:[^\->:\n,;]+)/i,/^(?:->>)/i,/^(?:-->>)/i,/^(?:->)/i,/^(?:-->)/i,/^(?:-[x])/i,/^(?:--[x])/i,/^(?::[^#\n;]+)/i,/^(?:$)/i,/^(?:.)/i],
+conditions: {"LINE":{"rules":[2,3,13],"inclusive":false},"ALIAS":{"rules":[2,3,7,8],"inclusive":false},"ID":{"rules":[2,3,6],"inclusive":false},"INITIAL":{"rules":[0,1,3,4,5,9,10,11,12,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34],"inclusive":true}}
 });
 return lexer;
 })();

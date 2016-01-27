@@ -43,8 +43,10 @@ exports.bounds = {
     verticalPos:0,
 
     list: [],
+    actlist: [],
     init    : function(){
         this.list = [];
+        this.actlist = [];
         this.data = {
             startx:undefined,
                 stopx :undefined,
@@ -104,11 +106,12 @@ exports.bounds = {
         //loop.stopy =  exports.bounds.getVerticalPos();
         return loop;
     },
-    newActivate:function(title){
-        this.list.push({startx:undefined,starty:this.verticalPos,stopx:undefined,stopy:undefined, title:title});
+    newActivate:function(actor){
+        this.actlist.push({startx:actor.x+conf.actorMargin,starty:this.verticalPos,stopx:actor.x+conf.actorMargin,stopy:undefined, title:''});
     },
     endActivate:function(){
-        var loop = this.list.pop();
+        var loop = this.actlist.pop();
+        loop.stopy = this.verticalPos;
         //loop.stopy =  exports.bounds.getVerticalPos();
         return loop;
     },
@@ -350,13 +353,12 @@ module.exports.draw = function (text, id) {
 
             case sq.yy.LINETYPE.ACT_START:
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
-                exports.bounds.newLoop(msg.message);
+                exports.bounds.newActivate(actors[msg.message]);
                 exports.bounds.bumpVerticalPos(conf.boxMargin + conf.boxTextMargin);
                 break;
             case sq.yy.LINETYPE.ACT_END:
-                loopData = exports.bounds.endLoop();
-
-                svgDraw.drawLoop(diagram, loopData,'loop', conf);
+                loopData = exports.bounds.endActivate();
+                svgDraw.drawLoop(diagram, loopData,'', conf);
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
                 break;
             case sq.yy.LINETYPE.OPT_START:
