@@ -181,7 +181,7 @@ exports.drawLoop = function(elem,bounds,labelText, conf){
  */
 exports.drawActivate = function(elem,bounds,conf){
     var g = elem.append('g');
-    
+
     var rectData = exports.getNoteRect();
     rectData.x = bounds.startx-5;
     rectData.y = bounds.starty;

@@ -43,10 +43,10 @@ exports.bounds = {
     verticalPos:0,
 
     list: [],
-    actlist: [],
+    activatelist: [],
     init    : function(){
         this.list = [];
-        this.actlist = [];
+        this.activatelist = [];
         this.data = {
             startx:undefined,
                 stopx :undefined,
@@ -107,15 +107,13 @@ exports.bounds = {
         return loop;
     },
     newActivate:function(actor){
-        var actorCenter = actor.x + (conf.width/2);
-
-        this.actlist.push({startx:actorCenter,starty:this.verticalPos,stopx:actorCenter,stopy:undefined, actor:actor});
+        var actorCenter = actor.x + (conf.width/2) + this.activatelist[actor.name].length * conf.boxMargin;
+        this.activatelist[actor.name].push({startx:actorCenter,starty:this.verticalPos,stopx:actorCenter,stopy:undefined, actor:actor});
     },
-    endActivate:function(){
-        var loop = this.actlist.pop();
-        loop.stopy = this.verticalPos;
-        //loop.stopy =  exports.bounds.getVerticalPos();
-        return loop;
+    endActivate:function(actor){
+        var actData= this.activatelist[actor.name].pop();
+        actData.stopy = this.verticalPos;
+        return actData;
     },
     addElseToLoop:function(message){
         var loop = this.list.pop();

@@ -103,16 +103,29 @@
     <h1>Bounding test & async message to self</h1>
     <div class="mermaid">
         sequenceDiagram
-        participant Islam
+        participant Alice
         participant Bob
         participant John the Long
-        Alice->Bob: Hello Bob, how are you?
 
-        activate Bob deactivate
+        Alice->>Bob: Hello Bob, how are you?
+
+        activate Bob
+
+        John the Long->>Alice: Super!
+
+        activate Alice
+
+        activate Alice
+        Alice-->>Alice: think
+        deactivate
+
+        Alice-->>John the Long: Super!
+        deactivate
 
         Bob-->>Alice: Checking with John...
-        Alice->>John the Long: Yes... John, how are you?
-        John the Long-->>Alice: Super!
+
+        deactivate
+
     </div>
     <br/>
 
