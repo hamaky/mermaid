@@ -180,19 +180,22 @@ exports.drawLoop = function(elem,bounds,labelText, conf){
  * @param description The text in the box
  */
 exports.drawActivate = function(elem,bounds,conf){
+
+    var adjustHeight = d3.select(elem[0][0].children[elem[0][0].children.length-1]).node().getBBox().height-1.5*conf.boxMargin;
+
     var g = elem.append('g');
 
     var rectData = exports.getNoteRect();
     rectData.x = bounds.startx-5;
-    rectData.y = bounds.starty;
+    rectData.y = bounds.starty - adjustHeight;
     rectData.width = 10;
-    rectData.height = bounds.stopy-bounds.starty-5;
+    rectData.height = bounds.stopy-bounds.starty;
     rectData.fill = '#526e52';
     rectData.stroke = 'none';
     rectData.class = 'labelBox';
     //rectData.color = 'white';
 
-    exports.drawRect(elem, rectData);
+    exports.drawRect(g, rectData);
 };
 
 /**

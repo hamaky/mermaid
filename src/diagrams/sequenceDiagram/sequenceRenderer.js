@@ -107,6 +107,7 @@ exports.bounds = {
         return loop;
     },
     newActivate:function(actor){
+        this.activatelist[actor.name] = this.activatelist[actor.name] || [];
         var actorCenter = actor.x + (conf.width/2) + this.activatelist[actor.name].length * conf.boxMargin;
         this.activatelist[actor.name].push({startx:actorCenter,starty:this.verticalPos,stopx:actorCenter,stopy:undefined, actor:actor});
     },
@@ -357,7 +358,7 @@ module.exports.draw = function (text, id) {
                 exports.bounds.bumpVerticalPos(conf.boxMargin + conf.boxTextMargin);
                 break;
             case sq.yy.LINETYPE.ACT_END:
-                activateData = exports.bounds.endActivate();
+                activateData = exports.bounds.endActivate(actors[msg.message]);
                 svgDraw.drawActivate(diagram, activateData, conf);
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
                 break;
