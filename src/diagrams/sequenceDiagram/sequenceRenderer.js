@@ -108,7 +108,7 @@ exports.bounds = {
     },
     newActivate:function(actor){
         this.activatelist[actor.name] = this.activatelist[actor.name] || [];
-        var actorCenter = actor.x + (conf.width/2) + this.activatelist[actor.name].length * (conf.boxMargin / 2);
+        var actorCenter = actor.x + (conf.width/2) + this.activatelist[actor.name].length * conf.boxMargin;
         this.activatelist[actor.name].push({startx:actorCenter,starty:this.verticalPos,stopx:actorCenter,stopy:undefined, actor:actor});
     },
     endActivate:function(actor){
