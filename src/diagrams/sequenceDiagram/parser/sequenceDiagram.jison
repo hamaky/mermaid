@@ -46,7 +46,7 @@
 "sequenceDiagram" return 'SD';
 ","               return ',';
 ";"               return 'NL';
-[^\->:\n,;]+      return 'ACTOR';
+(\-)?[^\->:\n,;]+      return 'ACTOR';
 "->>"             return 'SOLID_ARROW';
 "-->>"            return 'DOTTED_ARROW';
 "->"              return 'SOLID_OPEN_ARROW';
@@ -109,12 +109,16 @@ statement
 		$3.push({type: 'altEnd', signalType: yy.LINETYPE.ALT_END});
 
 		$$=$3;}
-    | activate actor document deactivate
-	{
-		$3.unshift({type: 'activateStart', actor:$2.actor, signalType: yy.LINETYPE.ACT_START});
-		$3.push({type: 'activateEnd', actor:$2.actor, signalType: yy.LINETYPE.ACT_END});
-		$$=$3;
-    };
+    | activate_statement 'NL'
+    | deactivate_statement 'NL';
+
+activate_statement
+    : activate actor {$$={type: 'activateStart', actor:$2.actor, signalType: yy.LINETYPE.ACT_START}}
+    ;
+
+deactivate_statement
+    : deactivate actor {$$={type: 'activateEnd', actor:$2.actor, signalType: yy.LINETYPE.ACT_END}}
+    ;
 
 note_statement
 	: 'note' placement actor text2

@@ -105,13 +105,31 @@ exports.apply = function(param){
         // log.debug(param);
         switch(param.type){
             case 'addActor':
+                param.actor = (param.actor.startsWith('+') || param.actor.startsWith('-')) ? param.actor.substring(1) : param.actor;
                 exports.addActor(param.actor, param.actor, param.description);
                 break;
             case 'addNote':
                 exports.addNote(param.actor,param.placement, param.text);
                 break;
             case 'addMessage':
-                exports.addSignal(param.from, param.to, param.msg, param.signalType);
+
+                if(param.to.startsWith('+') || param.to.startsWith('-')){
+                    var activate = param.to.startsWith('+');
+                    var deactivate = param.to.startsWith('-');
+                    param.to = param.to.substring(1);
+
+                    exports.addSignal(param.from, param.to, param.msg, param.signalType);
+                    
+                    if(activate){
+                        exports.addSignal(undefined, undefined, param.to, exports.LINETYPE.ACT_START);
+                    }
+                    if(deactivate){
+                        exports.addSignal(undefined, undefined, param.from, exports.LINETYPE.ACT_END);
+                    }
+                }else {
+                    exports.addSignal(param.from, param.to, param.msg, param.signalType);
+                }
+
                 break;
             case 'loopStart':
                 //log.debug('Loop text: ',param.loopText);
@@ -130,17 +148,20 @@ exports.apply = function(param){
                 exports.addSignal(undefined, undefined, undefined, param.signalType);
                 break;
             case 'activateStart':
-                //log.debug('Loop text: ',param.loopText);
+                //log.debug('Activate actor: ',param.actor);
+                exports.addActor(param.actor, param.actor, param.actor);
                 exports.addSignal(undefined, undefined, param.actor, param.signalType);
-                //yy.addSignal(undefined, undefined, $2, yy.LINETYPE.LOOP_START);
+                //yy.addSignal(undefined, undefined, $2, yy.LINETYPE.ACT_START);
                 break;
             case 'activateEnd':
+                //log.debug('Deactivate actor: ',param.actor);
                 exports.addSignal(undefined, undefined, param.actor, param.signalType);
+                //yy.addSignal(undefined, undefined, $2, yy.LINETYPE.ACT_END);
                 break;
             case 'altStart':
                 //log.debug('Loop text: ',param.loopText);
                 exports.addSignal(undefined, undefined, param.altText, param.signalType);
-                //yy.addSignal(undefined, undefined, $2, yy.LINETYPE.LOOP_START);
+                //yy.addSignal(undefined, undefined, $2, yy.LINETYPE.ALT_START);
                 break;
             case 'else':
                 exports.addSignal(undefined, undefined, param.altText, param.signalType);
