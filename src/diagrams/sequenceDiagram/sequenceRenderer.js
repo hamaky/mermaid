@@ -191,6 +191,10 @@ var drawMessage = function(elem, startx, stopx, verticalPos, msg){
     var g = elem.append('g');
     var txtCenter = startx + (stopx-startx)/2;
 
+    if(startx===stopx){
+        txtCenter += conf.messageMargin;
+    }
+
     var textElem = g.append('text')      // text label for the x axis
         .attr('x', txtCenter)
         .attr('y', verticalPos - 7)
@@ -212,9 +216,11 @@ var drawMessage = function(elem, startx, stopx, verticalPos, msg){
     var line;
 
     if(startx===stopx){
+        startx = stopx = stopx +3;
+
         line  = g.append('path')
             .attr('d', 'M ' +startx+ ','+verticalPos+' C ' +(startx+60)+ ','+(verticalPos-10)+' ' +(startx+60)+ ',' +
-            (verticalPos+30)+' ' +startx+ ','+(verticalPos+20));
+                (verticalPos+33)+' ' +startx+ ','+(verticalPos+23));
 
         exports.bounds.bumpVerticalPos(30);
         var dx = Math.max(textWidth/2,100);
@@ -358,7 +364,7 @@ module.exports.draw = function (text, id) {
                 exports.bounds.bumpVerticalPos(conf.boxMargin + conf.boxTextMargin);
                 break;
             case sq.yy.LINETYPE.ACT_END:
-                activateData = exports.bounds.endActivate(actors[msg.message]);
+                var activateData = exports.bounds.endActivate(actors[msg.message]);
                 svgDraw.drawActivate(diagram, activateData, conf);
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
                 break;

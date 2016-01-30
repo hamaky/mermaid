@@ -182,15 +182,15 @@ exports.drawLoop = function(elem,bounds,labelText, conf){
 exports.drawActivate = function(elem,bounds,conf){
 
     //IE: adjust height to cater for self activation
-    var adjustHeight = d3.select(elem[0][0].children[elem[0][0].children.length-1]).node().getBBox().height-1.5*conf.boxMargin;
+    var adjustStarty = d3.select(elem[0][0].children[elem[0][0].children.length-1]).node().getBBox().height-1.5*conf.boxMargin;
 
     var g = elem.append('g');
 
     var rectData = exports.getNoteRect();
     rectData.x = bounds.startx-5;
-    rectData.y = bounds.starty - adjustHeight;
+    rectData.y = bounds.starty - adjustStarty;
     rectData.width = 10;
-    rectData.height = bounds.stopy-bounds.starty;
+    rectData.height = bounds.stopy-bounds.starty+5;
     rectData.fill = '#526e52';
     rectData.stroke = 'none';
     rectData.class = 'labelBox';

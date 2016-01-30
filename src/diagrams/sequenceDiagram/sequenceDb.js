@@ -119,7 +119,7 @@ exports.apply = function(param){
                     param.to = param.to.substring(1);
 
                     exports.addSignal(param.from, param.to, param.msg, param.signalType);
-                    
+
                     if(activate){
                         exports.addSignal(undefined, undefined, param.to, exports.LINETYPE.ACT_START);
                     }
