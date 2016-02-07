@@ -197,6 +197,13 @@ exports.drawActivate = function(elem,bounds,conf){
     //rectData.color = 'white';
 
     exports.drawRect(g, rectData);
+
+    // re-order activation to appear prior child elements
+    if(bounds.order) {
+        var parent = d3.select(elem[0][0].children[bounds.order])[0][0];
+        var child = g[0][0];
+        parent.appendChild(child);
+    }
 };
 
 /**

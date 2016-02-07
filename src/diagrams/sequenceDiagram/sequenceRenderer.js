@@ -106,10 +106,10 @@ exports.bounds = {
         //loop.stopy =  exports.bounds.getVerticalPos();
         return loop;
     },
-    newActivate:function(actor){
+    newActivate:function(actor, order){
         this.activatelist[actor.name] = this.activatelist[actor.name] || [];
         var actorCenter = actor.x + (conf.width/2) + this.activatelist[actor.name].length * conf.boxMargin;
-        this.activatelist[actor.name].push({startx:actorCenter,starty:this.verticalPos,stopx:actorCenter,stopy:undefined, actor:actor});
+        this.activatelist[actor.name].push({startx:actorCenter,starty:this.verticalPos,stopx:actorCenter,stopy:undefined, actor:actor, order:order});
     },
     endActivate:function(actor){
         var actData= this.activatelist[actor.name].pop();
@@ -359,8 +359,9 @@ module.exports.draw = function (text, id) {
                 break;
 
             case sq.yy.LINETYPE.ACT_START:
+                var order = diagram[0][0].children.length-1;
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
-                exports.bounds.newActivate(actors[msg.message]);
+                exports.bounds.newActivate(actors[msg.message], order);
                 exports.bounds.bumpVerticalPos(conf.boxMargin + conf.boxTextMargin);
                 break;
             case sq.yy.LINETYPE.ACT_END:
