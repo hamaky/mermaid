@@ -112,7 +112,7 @@ exports.bounds = {
         this.activatelist[actor.name].push({startx:actorCenter,starty:this.verticalPos,stopx:actorCenter,stopy:undefined, actor:actor, order:order});
     },
     endActivate:function(actor){
-        if(!this.activatelist[actor.name] || this.activatelist[actor.name].length == 0 ) return null;
+        if(!actor || !this.activatelist[actor.name] || this.activatelist[actor.name].length == 0 ) return null;
         var actData = this.activatelist[actor.name].pop();
         actData.stopy = this.verticalPos;
         return actData;
