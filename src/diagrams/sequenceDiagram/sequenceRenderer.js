@@ -49,9 +49,9 @@ exports.bounds = {
         this.activatelist = [];
         this.data = {
             startx:undefined,
-                stopx :undefined,
-                starty:undefined,
-                stopy :undefined
+            stopx :undefined,
+            starty:undefined,
+            stopy :undefined
         };
         this.verticalPos =0;
     },
@@ -112,7 +112,8 @@ exports.bounds = {
         this.activatelist[actor.name].push({startx:actorCenter,starty:this.verticalPos,stopx:actorCenter,stopy:undefined, actor:actor, order:order});
     },
     endActivate:function(actor){
-        var actData= this.activatelist[actor.name].pop();
+        if(!this.activatelist[actor.name] || this.activatelist[actor.name].length == 0 ) return null;
+        var actData = this.activatelist[actor.name].pop();
         actData.stopy = this.verticalPos;
         return actData;
     },
@@ -366,8 +367,10 @@ module.exports.draw = function (text, id) {
                 break;
             case sq.yy.LINETYPE.ACT_END:
                 var activateData = exports.bounds.endActivate(actors[msg.message]);
-                svgDraw.drawActivate(diagram, activateData, conf);
-                exports.bounds.bumpVerticalPos(conf.boxMargin);
+                if(activateData) {
+                    svgDraw.drawActivate(diagram, activateData, conf);
+                    exports.bounds.bumpVerticalPos(conf.boxMargin);
+                }
                 break;
             case sq.yy.LINETYPE.OPT_START:
                 exports.bounds.bumpVerticalPos(conf.boxMargin);
